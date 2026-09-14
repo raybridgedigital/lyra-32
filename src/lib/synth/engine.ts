@@ -1,4 +1,5 @@
 import type { LfoDest, LfoParams, Patch, Waveform } from "./types";
+import type { ArpStep } from "./arp";
 import { midiToFreq } from "./midi";
 import { INIT_PATCH, clonePatch } from "./patches";
 
@@ -83,6 +84,17 @@ function syncWave(ctx: AudioContext, ratio: number): PeriodicWave {
   return ctx.createPeriodicWave(real, imag);
 }
 
+function shuffle<T>(arr: T[]): T[] {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const t = a[i]!;
+    a[i] = a[j]!;
+    a[j] = t;
+  }
+  return a;
+}
+
 const ARP_DIV: Record<string, number> = {
   "1/4": 1,
   "1/8": 0.5,
@@ -119,6 +131,7 @@ function makeAudioContext(): AudioContext {
 }
 
 type LfoBank = { lfo1: OscillatorNode; lfo2: OscillatorNode; drift: OscillatorNode };
+type DcBank = { mod: ConstantSourceNode; at: ConstantSourceNode };
 
 class Voice {
   midi: number;
@@ -126,6 +139,7 @@ class Voice {
   releasing = false;
   private ctx: AudioContext;
   private vca: GainNode;
+  private expr: GainNode;
   private filters: BiquadFilterNode[];
   private oscs: OscillatorNode[] = [];
   private osc1s: OscillatorNode[] = [];
@@ -139,6 +153,9 @@ class Voice {
   private onEnded: () => void;
   private releaseTimer: number | null = null;
   private extras: AudioNode[] = [];
+  private patchSnap: Patch;
+  private bend: number;
+  private fenv: ConstantSourceNode | null = null;
 
   constructor(
     ctx: AudioContext,
@@ -148,7 +165,7 @@ class Voice {
     midi: number,
     velocity: number,
     bend: number,
-    modWheel: number,
+    dc: DcBank,
     now: number,
     onEnded: () => void,
   ) {
@@ -156,11 +173,15 @@ class Voice {
     this.midi = midi;
     this.startedAt = now;
     this.onEnded = onEnded;
+    this.patchSnap = patch;
+    this.bend = bend;
 
     this.mix = ctx.createGain();
     this.vca = ctx.createGain();
     this.pan = ctx.createStereoPanner();
+    this.expr = ctx.createGain();
     this.vca.gain.setValueAtTime(0.0001, now);
+    this.expr.gain.setValueAtTime(1, now);
 
     const shaper = ctx.createWaveShaper();
     shaper.curve = tanhCurve(patch.drive) as Float32Array<ArrayBuffer>;
@@ -196,7 +217,8 @@ class Voice {
     for (let i = 0; i < this.filters.length - 1; i++) this.filters[i]!.connect(this.filters[i + 1]!);
     this.filters[this.filters.length - 1]!.connect(this.vca);
     this.vca.connect(this.pan);
-    this.pan.connect(dest);
+    this.pan.connect(this.expr);
+    this.expr.connect(dest);
 
     const uni = patch.unison.voices;
     this.spawnOsc(patch, "osc1", midi, bend, now, uni);
@@ -278,14 +300,32 @@ class Voice {
 
     this.routeLfo(lfos.lfo1, patch.lfo, 1);
     this.routeLfo(lfos.lfo2, patch.lfo2, 1);
+
+    const velDc = ctx.createConstantSource();
+    velDc.offset.value = clamp(velocity, 0, 1);
+    velDc.start(now);
+    this.extras.push(velDc);
+    this.sources.push(velDc);
+
+    const fenv = ctx.createConstantSource();
+    const fA = Math.max(0.004, patch.filterEnv.attack);
+    const fD = Math.max(0.02, patch.filterEnv.decay / 3);
+    fenv.offset.setValueAtTime(0, now);
+    fenv.offset.linearRampToValueAtTime(1, now + fA);
+    fenv.offset.setTargetAtTime(Math.max(0.0001, patch.filterEnv.sustain), now + fA, fD);
+    fenv.start(now);
+    this.fenv = fenv;
+    this.extras.push(fenv);
+    this.sources.push(fenv);
+
     for (const row of patch.matrix ?? []) {
       if (Math.abs(row.amount) < 0.01) continue;
       if (row.src === "lfo1") this.routeLfo(lfos.lfo1, { ...patch.lfo, dest: row.dest, depth: row.amount }, 1);
       else if (row.src === "lfo2") this.routeLfo(lfos.lfo2, { ...patch.lfo2, dest: row.dest, depth: row.amount }, 1);
-      else if (row.src === "mod" && row.dest === "cutoff") {
-        const extra = cutoffHz(clamp(patch.filter.cutoff + modWheel * row.amount * 0.4, 0, 1), patch.filter.keyTrack, midi);
-        for (const f of this.filters) f.frequency.setTargetAtTime(extra, now, 0.02);
-      }
+      else if (row.src === "mod") this.routeDc(dc.mod, row.dest, row.amount);
+      else if (row.src === "at") this.routeDc(dc.at, row.dest, row.amount);
+      else if (row.src === "vel") this.routeDc(velDc, row.dest, row.amount);
+      else if (row.src === "fenv") this.routeDc(fenv, row.dest, row.amount);
     }
 
     const peak = vel * 0.38;
@@ -333,6 +373,39 @@ class Voice {
     this.extras.push(g);
   }
 
+  private routeDc(src: ConstantSourceNode, dest: LfoDest, amount: number) {
+    if (Math.abs(amount) < 0.01) return;
+    const g = this.ctx.createGain();
+    if (dest === "cutoff") {
+      g.gain.value = amount * 2800;
+      src.connect(g);
+      for (const f of this.filters) g.connect(f.detune);
+    } else if (dest === "pitch") {
+      g.gain.value = amount * 400;
+      src.connect(g);
+      for (const o of this.oscs) g.connect(o.detune);
+    } else if (dest === "pan") {
+      g.gain.value = amount * 0.85;
+      src.connect(g);
+      g.connect(this.pan.pan);
+    } else if (dest === "amp") {
+      g.gain.value = amount * 0.45;
+      src.connect(g);
+      g.connect(this.expr.gain);
+    } else if (dest === "res") {
+      g.gain.value = amount * 14;
+      src.connect(g);
+      for (const f of this.filters) g.connect(f.Q);
+    } else if (dest === "fm" && this.fmGain) {
+      g.gain.value = amount * 1400;
+      src.connect(g);
+      g.connect(this.fmGain.gain);
+    } else {
+      return;
+    }
+    this.extras.push(g);
+  }
+
   private spawnOsc(patch: Patch, which: "osc1" | "osc2", midi: number, bend: number, now: number, uni: number) {
     const p = patch[which];
     if ((p.level ?? 0) < 0.001) return;
@@ -372,15 +445,20 @@ class Voice {
   }
 
   setBend(semis: number, when: number) {
-    const ratio = Math.pow(2, semis / 12);
-    for (const o of this.oscs) {
+    this.bend = semis;
+    const p = this.patchSnap;
+    const retune = (o: OscillatorNode, note: number, fine: number) => {
+      const f = midiToFreq(note, semis) * Math.pow(2, fine / 1200);
+      if (!Number.isFinite(f)) return;
       try {
-        const f = o.frequency.value;
-        o.frequency.setTargetAtTime(f * ratio, when, 0.01);
+        o.frequency.setTargetAtTime(f, when, 0.015);
       } catch {
         /* closed */
       }
-    }
+    };
+    for (const o of this.osc1s) retune(o, this.midi + p.osc1.octave * 12 + p.osc1.semitone, p.osc1.fine);
+    for (const o of this.osc2s) retune(o, this.midi + p.osc2.octave * 12 + p.osc2.semitone, p.osc2.fine);
+    for (const o of this.subs) retune(o, this.midi + p.osc1.octave * 12 - 12, 0);
   }
 
   setCutoff(hz: number, q: number, when: number) {
@@ -392,6 +470,8 @@ class Voice {
 
   glideTo(midi: number, bend: number, patch: Patch, when: number, portamento: boolean) {
     this.midi = midi;
+    this.bend = bend;
+    this.patchSnap = patch;
     const glide = patch.glide ?? 0;
     const usePorta = portamento && glide > 0.01;
     const dur = usePorta ? Math.max(0.03, glide * 1.15) : 0.006;
@@ -423,6 +503,15 @@ class Voice {
     for (const f of this.filters) {
       const end = cutoffHz(patch.filter.cutoff * 0.6, patch.filter.keyTrack, this.midi);
       f.frequency.setTargetAtTime(end, now, Math.max(0.03, patch.filterEnv.release / 3));
+    }
+    if (this.fenv) {
+      try {
+        this.fenv.offset.cancelScheduledValues(now);
+        this.fenv.offset.setValueAtTime(Math.max(0.0001, this.fenv.offset.value), now);
+        this.fenv.offset.setTargetAtTime(0.0001, now, Math.max(0.03, patch.filterEnv.release / 3));
+      } catch {
+        /* */
+      }
     }
     const hang = r + 0.05;
     this.releaseTimer = window.setTimeout(() => this.kill(), hang * 1000);
@@ -461,6 +550,7 @@ class Voice {
       this.vca.disconnect();
       this.mix.disconnect();
       this.pan.disconnect();
+      this.expr.disconnect();
     } catch {
       /* */
     }
@@ -527,16 +617,22 @@ export class LyraEngine {
     phaserLfo: OscillatorNode;
   };
   private lfos: LfoBank;
+  private dc: DcBank;
   private arpHeld: number[] = [];
+  private arpPhysical = new Set<number>();
   private arpTimer: number | null = null;
   private arpIndex = 0;
   private arpDir = 1;
+  private arpNoteCursor = 0;
   private arpVoice: Voice | null = null;
   private monoVoice: Voice | null = null;
   private monoStack: number[] = [];
   private listener: EngineListener;
   private started = false;
   private hostBpm: number | null = null;
+  private muted = false;
+  private arpBag: number[] = [];
+  private arpBagKey = "";
 
   constructor(ctx: AudioContext, listener: EngineListener = {}) {
     this.ctx = ctx;
@@ -658,6 +754,14 @@ export class LyraEngine {
     drift.start();
     this.lfos = { lfo1, lfo2, drift };
 
+    const mod = ctx.createConstantSource();
+    mod.offset.value = 0;
+    mod.start();
+    const at = ctx.createConstantSource();
+    at.offset.value = 0;
+    at.start();
+    this.dc = { mod, at };
+
     this.started = true;
     this.applyPatch(this.patch);
     listener.onState?.(ctx.state);
@@ -681,7 +785,7 @@ export class LyraEngine {
     this.buses.revWet.gain.setTargetAtTime(fx.reverbMix, now, 0.04);
     this.buses.chorusGain.gain.setTargetAtTime(fx.chorusMix * 0.7, now, 0.04);
     this.buses.phaserGain.gain.setTargetAtTime((fx.phaserMix ?? 0) * 0.65, now, 0.04);
-    this.buses.master.gain.setTargetAtTime(clamp(this.patch.master, 0, 1), now, 0.03);
+    this.buses.master.gain.setTargetAtTime(this.muted ? 0 : clamp(this.patch.master, 0, 1), now, 0.03);
     this.lfos.lfo1.frequency.setTargetAtTime(clamp(this.patch.lfo.rate, 0.02, 30), now, 0.02);
     this.lfos.lfo1.type = this.patch.lfo.wave;
     this.lfos.lfo2.frequency.setTargetAtTime(clamp(this.patch.lfo2.rate, 0.02, 30), now, 0.02);
@@ -691,19 +795,35 @@ export class LyraEngine {
       const hz = cutoffHz(this.patch.filter.cutoff + this.cutoffMod * 0.35, this.patch.filter.keyTrack, v.midi);
       v.setCutoff(hz, q, now);
     }
-    if (this.patch.arp.on) this.ensureArp();
-    else this.stopArp();
+    if (this.patch.arp.on) {
+      this.absorbHeldIntoArp();
+      if (!this.patch.arp.hold) {
+        this.arpHeld = this.arpHeld.filter((n) => this.arpPhysical.has(n) || this.sustained.has(n));
+        if (this.arpHeld.length === 0) this.stopArp();
+        else this.ensureArp();
+      } else {
+        this.ensureArp();
+      }
+    } else {
+      this.stopArp();
+      this.arpHeld = [...this.arpPhysical];
+    }
     if (this.patch.polyMode === "poly") this.monoStack = [];
   }
 
   setCutoffMod(v: number) {
     this.cutoffMod = clamp(v, 0, 1);
     const now = this.ctx.currentTime;
+    this.dc.mod.offset.setTargetAtTime(this.cutoffMod, now, 0.03);
     const q = 0.2 + this.patch.filter.resonance * 18;
     for (const vo of this.voices) {
       const hz = cutoffHz(this.patch.filter.cutoff + this.cutoffMod * 0.4, this.patch.filter.keyTrack, vo.midi);
       vo.setCutoff(hz, q, now);
     }
+  }
+
+  setAftertouch(v: number) {
+    this.dc.at.offset.setTargetAtTime(clamp(v, 0, 1), this.ctx.currentTime, 0.025);
   }
 
   setHostTempo(bpm: number | null) {
@@ -712,28 +832,44 @@ export class LyraEngine {
 
   setMaster(v: number) {
     this.patch.master = v;
-    this.buses.master.gain.setTargetAtTime(clamp(v, 0, 1), this.ctx.currentTime, 0.02);
+    if (!this.muted) this.buses.master.gain.setTargetAtTime(clamp(v, 0, 1), this.ctx.currentTime, 0.02);
+  }
+
+  setMuted(on: boolean) {
+    this.muted = on;
+    this.buses.master.gain.setTargetAtTime(on ? 0 : clamp(this.patch.master, 0, 1), this.ctx.currentTime, 0.03);
   }
 
   setBend(semis: number) {
     this.bend = semis;
+    const now = this.ctx.currentTime;
+    for (const v of this.voices) v.setBend(semis, now);
   }
 
   setSustain(on: boolean) {
     this.sustain = on;
-    if (!on) {
-      for (const n of [...this.sustained]) {
-        this.sustained.delete(n);
-        if (!this.held.has(n)) this.releaseNote(n);
+    if (on) return;
+    for (const n of [...this.sustained]) {
+      this.sustained.delete(n);
+      if (this.patch.arp.on) {
+        if (!this.patch.arp.hold && !this.arpPhysical.has(n)) {
+          this.arpHeld = this.arpHeld.filter((x) => x !== n);
+        }
+      } else if (!this.held.has(n)) {
+        this.releaseNote(n);
       }
-      if (this.patch.polyMode !== "poly" && this.monoStack.length === 0) this.monoVoice?.release(this.patch);
     }
+    if (this.patch.arp.on && !this.patch.arp.hold && this.arpHeld.length === 0) this.stopArp();
+    if (this.patch.polyMode !== "poly" && this.monoStack.length === 0) this.monoVoice?.release(this.patch);
   }
 
   noteOn(midi: number, velocity = 0.85) {
     kickContext(this.ctx);
     if (this.patch.arp.on) {
+      const replace = this.patch.arp.hold && this.arpPhysical.size === 0 && !this.sustain;
+      if (replace) this.arpHeld = [];
       if (!this.arpHeld.includes(midi)) this.arpHeld.push(midi);
+      this.arpPhysical.add(midi);
       this.held.set(midi, "arp");
       this.ensureArp();
       return;
@@ -759,16 +895,22 @@ export class LyraEngine {
   }
 
   noteOff(midi: number) {
-    this.arpHeld = this.arpHeld.filter((n) => n !== midi);
+    this.arpPhysical.delete(midi);
     this.held.delete(midi);
     this.monoStack = this.monoStack.filter((n) => n !== midi);
-    if (this.sustain) {
-      this.sustained.add(midi);
+    if (this.patch.arp.on) {
+      if (this.sustain && !this.patch.arp.hold) {
+        this.sustained.add(midi);
+        return;
+      }
+      if (!this.patch.arp.hold) {
+        this.arpHeld = this.arpHeld.filter((n) => n !== midi);
+        if (this.arpHeld.length === 0) this.stopArp();
+      }
       return;
     }
-    if (this.patch.arp.on) {
-      this.releaseNote(midi);
-      if (this.arpHeld.length === 0) this.stopArp();
+    if (this.sustain) {
+      this.sustained.add(midi);
       return;
     }
     if (this.patch.polyMode === "poly") {
@@ -785,8 +927,12 @@ export class LyraEngine {
     this.sustained.clear();
     this.monoStack = [];
     this.arpHeld = [];
+    this.arpPhysical.clear();
     this.stopArp();
     this.monoVoice = null;
+    this.dc.at.offset.setValueAtTime(0, this.ctx.currentTime);
+    this.dc.mod.offset.setValueAtTime(0, this.ctx.currentTime);
+    this.cutoffMod = 0;
     this.listener.onVoices?.(0);
   }
 
@@ -829,7 +975,7 @@ export class LyraEngine {
       midi,
       velocity,
       this.bend,
-      this.cutoffMod,
+      this.dc,
       now,
       () => {
         this.voices = this.voices.filter((x) => x !== v);
@@ -842,6 +988,16 @@ export class LyraEngine {
     this.held.set(midi, v);
     if (this.patch.polyMode !== "poly") this.monoVoice = v;
     this.listener.onVoices?.(this.voices.length);
+  }
+
+  private absorbHeldIntoArp() {
+    for (const [midi, v] of [...this.held.entries()]) {
+      if (v === "arp") continue;
+      v.release(this.patch);
+      if (!this.arpHeld.includes(midi)) this.arpHeld.push(midi);
+      this.arpPhysical.add(midi);
+      this.held.set(midi, "arp");
+    }
   }
 
   private ensureArp() {
@@ -857,7 +1013,11 @@ export class LyraEngine {
     this.arpVoice?.release(this.patch);
     this.arpVoice = null;
     this.arpIndex = 0;
-    this.listener.onArpStep?.(0, null);
+    this.arpDir = 1;
+    this.arpNoteCursor = 0;
+    this.arpBag = [];
+    this.arpBagKey = "";
+    this.listener.onArpStep?.(-1, null);
   }
 
   private arpTick = () => {
@@ -869,30 +1029,56 @@ export class LyraEngine {
     const oct = this.patch.arp.octaves;
     const expanded: number[] = [];
     for (let o = 0; o < oct; o++) for (const n of notes) expanded.push(n + o * 12);
-    if (this.arpIndex >= expanded.length) this.arpIndex = 0;
-    const note = expanded[this.arpIndex] ?? expanded[0]!;
-    const now = this.ctx.currentTime;
-    this.arpVoice?.release(this.patch);
-    this.spawn(note, 0.85, now);
-    this.arpVoice = this.voices[this.voices.length - 1] ?? null;
-    this.listener.onArpStep?.(this.arpIndex, note);
+    if (expanded.length === 0) {
+      this.stopArp();
+      return;
+    }
 
     const tempo = this.hostBpm ?? this.patch.arp.tempo;
-    const step = (60 / tempo) * (ARP_DIV[this.patch.arp.rate] ?? 0.25);
-    const swing = this.arpIndex % 2 === 1 ? step * this.patch.arp.swing * 0.5 : 0;
+    const stepDur = (60 / tempo) * (ARP_DIV[this.patch.arp.rate] ?? 0.25);
+    const usePat = this.patch.arp.pattern;
+    const si = usePat ? this.arpIndex % 16 : this.arpIndex;
+    const st: ArpStep = usePat
+      ? (this.patch.arp.steps[si] ?? { on: true, accent: false, oct: 0 })
+      : { on: true, accent: false, oct: 0 };
+    const swing = si % 2 === 1 ? stepDur * this.patch.arp.swing * 0.5 : 0;
     const gate = clamp(this.patch.arp.gate, 0.1, 0.95);
-    window.setTimeout(() => {
-      this.arpVoice?.release(this.patch);
-    }, (step * gate + swing) * 1000);
+    const now = this.ctx.currentTime;
 
-    if (this.patch.arp.mode === "updown") {
+    if (st.on) {
+      let note: number;
+      if (usePat) {
+        const base = expanded[this.arpNoteCursor % expanded.length] ?? expanded[0]!;
+        note = clamp(base + st.oct * 12, 0, 127);
+        this.arpNoteCursor = (this.arpNoteCursor + 1) % expanded.length;
+      } else {
+        note = expanded[this.arpIndex] ?? expanded[0]!;
+      }
+      const vel = st.accent ? 1 : 0.82;
+      this.arpVoice?.release(this.patch);
+      this.spawn(note, vel, now);
+      const voice = this.voices[this.voices.length - 1] ?? null;
+      this.arpVoice = voice;
+      this.listener.onArpStep?.(usePat ? si : this.arpIndex, note);
+      window.setTimeout(() => {
+        voice?.release(this.patch);
+      }, (stepDur * gate + swing) * 1000);
+    } else {
+      this.listener.onArpStep?.(si, null);
+    }
+
+    if (!usePat && this.patch.arp.mode === "updown") {
       this.arpIndex += this.arpDir;
       if (this.arpIndex >= expanded.length - 1) this.arpDir = -1;
       if (this.arpIndex <= 0) this.arpDir = 1;
+    } else if (usePat) {
+      this.arpIndex = (this.arpIndex + 1) % 16;
+      if (this.arpIndex === 0) this.arpBag = [];
     } else {
-      this.arpIndex = (this.arpIndex + 1) % Math.max(1, expanded.length);
+      this.arpIndex = (this.arpIndex + 1) % expanded.length;
+      if (this.arpIndex === 0) this.arpBag = [];
     }
-    this.arpTimer = window.setTimeout(this.arpTick, (step + swing) * 1000);
+    this.arpTimer = window.setTimeout(this.arpTick, (stepDur + swing) * 1000);
   };
 
   private orderArp(notes: number[]): number[] {
@@ -900,8 +1086,14 @@ export class LyraEngine {
     switch (this.patch.arp.mode) {
       case "down":
         return s.reverse();
-      case "random":
-        return s.sort(() => Math.random() - 0.5);
+      case "random": {
+        const key = s.join(",");
+        if (this.arpBagKey !== key || this.arpBag.length === 0) {
+          this.arpBagKey = key;
+          this.arpBag = shuffle(s);
+        }
+        return this.arpBag;
+      }
       case "asplayed":
         return notes;
       default:

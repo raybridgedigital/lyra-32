@@ -1,4 +1,5 @@
 import type { LfoParams, ModRoute, OscParams, Patch } from "./types";
+import { defaultArpSteps, normalizeArpSteps } from "./arp";
 
 export const osc = (over: Partial<OscParams> = {}): OscParams => ({
   wave: "sawtooth",
@@ -31,7 +32,7 @@ export const mx = (
   d: ModRoute,
 ): ModRoute[] => [a, b, c, d];
 
-type PatchIn = Omit<Partial<Patch>, "osc1" | "osc2" | "fx" | "lfo2" | "matrix"> & {
+type PatchIn = Omit<Partial<Patch>, "osc1" | "osc2" | "fx" | "lfo2" | "matrix" | "arp"> & {
   id: string;
   name: string;
   category: string;
@@ -40,6 +41,7 @@ type PatchIn = Omit<Partial<Patch>, "osc1" | "osc2" | "fx" | "lfo2" | "matrix"> 
   fx?: Partial<Patch["fx"]>;
   lfo2?: Partial<LfoParams>;
   matrix?: ModRoute[];
+  arp?: Partial<Patch["arp"]>;
 };
 
 export function patch(partial: PatchIn): Patch {
@@ -64,7 +66,18 @@ export function patch(partial: PatchIn): Patch {
     glide: 0,
     polyMode: "poly",
     master: 0.7,
-    arp: { on: false, mode: "up", rate: "1/16", octaves: 1, gate: 0.5, swing: 0, tempo: 120 },
+    arp: {
+      on: false,
+      hold: false,
+      pattern: false,
+      mode: "up",
+      rate: "1/16",
+      octaves: 1,
+      gate: 0.5,
+      swing: 0,
+      tempo: 120,
+      steps: defaultArpSteps(),
+    },
     ...rest,
     osc1: osc(o1),
     osc2: osc({
@@ -108,6 +121,18 @@ export function normalizePatch(p: Patch): Patch {
     },
     osc1: osc(p.osc1),
     osc2: osc(p.osc2 ?? { level: 0 }),
+    arp: {
+      on: Boolean(p.arp?.on),
+      hold: Boolean(p.arp?.hold),
+      pattern: Boolean(p.arp?.pattern),
+      mode: p.arp?.mode ?? "up",
+      rate: p.arp?.rate ?? "1/16",
+      octaves: (p.arp?.octaves === 2 || p.arp?.octaves === 3 ? p.arp.octaves : 1) as 1 | 2 | 3,
+      gate: Number.isFinite(p.arp?.gate) ? p.arp.gate : 0.5,
+      swing: Number.isFinite(p.arp?.swing) ? p.arp.swing : 0,
+      tempo: Number.isFinite(p.arp?.tempo) ? p.arp.tempo : 120,
+      steps: normalizeArpSteps(p.arp?.steps),
+    },
   };
 }
 
@@ -124,7 +149,11 @@ export function clonePatch(p: Patch, over: Partial<Patch> = {}): Patch {
     lfo2: { ...defaultLfo2(), ...p.lfo2, ...(over.lfo2 ?? {}) },
     fx: { ...p.fx, phaserMix: p.fx?.phaserMix ?? 0, ...(over.fx ?? {}) },
     unison: { ...p.unison, ...(over.unison ?? {}) },
-    arp: { ...p.arp, ...(over.arp ?? {}) },
+    arp: {
+      ...p.arp,
+      ...(over.arp ?? {}),
+      steps: over.arp?.steps ?? p.arp?.steps,
+    },
     matrix: over.matrix ?? p.matrix,
     ring: over.ring ?? p.ring,
     sync: over.sync ?? p.sync,
@@ -140,12 +169,15 @@ type Draft = Omit<Patch, "id" | "name" | "category" | "osc1" | "osc2"> & {
 
 const arpOff = {
   on: false,
+  hold: false,
+  pattern: false,
   mode: "up" as const,
   rate: "1/16" as const,
   octaves: 1 as const,
   gate: 0.5,
   swing: 0,
   tempo: 120,
+  steps: defaultArpSteps(),
 };
 
 export const CATEGORY_ORDER = [
@@ -421,7 +453,7 @@ const DEFAULTS: Record<string, Draft> = {
     glide: 0,
     polyMode: "poly",
     master: 0.68,
-    arp: { on: true, mode: "up", rate: "1/16", octaves: 2, gate: 0.5, swing: 0.08, tempo: 124 },
+    arp: { ...arpOff, on: true, mode: "up", rate: "1/16", octaves: 2, gate: 0.5, swing: 0.08, tempo: 124 },
   },
   Techno: {
     osc1: { wave: "sawtooth", octave: -1, level: 0.92 },
@@ -449,7 +481,7 @@ const DEFAULTS: Record<string, Draft> = {
     glide: 0.05,
     polyMode: "mono",
     master: 0.7,
-    arp: { on: false, mode: "up", rate: "1/16", octaves: 1, gate: 0.42, swing: 0.08, tempo: 132 },
+    arp: { ...arpOff, on: false, mode: "up", rate: "1/16", octaves: 1, gate: 0.42, swing: 0.08, tempo: 132 },
   },
   Drums: {
     osc1: { wave: "sine", octave: -1, level: 1 },
@@ -540,6 +572,10 @@ export function P(category: string, id: string, name: string, over: Over = {}): 
     matrix: (over.matrix as ModRoute[] | undefined) ?? d.matrix,
     fx: { ...d.fx, ...over.fx },
     unison: { ...d.unison, ...over.unison },
-    arp: { ...d.arp, ...over.arp },
+    arp: {
+      ...d.arp,
+      ...over.arp,
+      steps: over.arp?.steps ? normalizeArpSteps(over.arp.steps) : d.arp.steps,
+    },
   });
 }

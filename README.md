@@ -4,13 +4,25 @@ Hybrid polyphonic web synthesizer by [Raybridge Digital](https://github.com/rayb
 
 Play from a class-compliant USB-C MIDI keyboard, the computer keys (A–L), or the on-screen piano. Chrome / Edge / Firefox.
 
+## Mk III.1 (v3.1)
+
+- 16-step arp pattern (gate, accent, ±octave) with playhead
+- Arpeggiator Hold / Latch (Pattern also arms the arp)
+- Aftertouch in the modulation matrix (channel + poly)
+- Matrix **Vel** and **FEG** actually modulate (not display-only)
+- Live pitch-bend on sounding notes
+- Mute stays muted when you turn knobs
+- Sustain + arp no longer latches forever
+- LFO 1 / LFO 2 use aligned Rate / Depth sliders
+- Five extra Lead patches (Howl Super, Air Super, Super Chorus, Wide Chorus, Halo Lead)
+- 166 factory patches in banks (incl. Techno, Strings, Drums)
+
 ## Mk III (v3)
 
 - DAW mode: IAC port picker, MIDI clock follow, Ableton / Logic setup
 - Favorites and user-named patches
 - Yamaha-style legato
 - Faceplate polish for 15-inch screens (header, matrix, knobs)
-- 161 factory patches in banks (incl. Techno, Strings, Drums)
 
 ## Mk II
 

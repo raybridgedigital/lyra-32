@@ -33,7 +33,8 @@ import type {
 } from "@/lib/synth/types";
 import { Keyboard } from "./Keyboard";
 import { DawPanel } from "./DawPanel";
-import { AmtFader, Knob, Seg } from "./Knob";
+import { PatternBar } from "./PatternBar";
+import { AmtFader, Knob, LfoSlider, Seg } from "./Knob";
 import { Scope } from "./Scope";
 
 function fmtHz(v: number) {
@@ -79,6 +80,7 @@ const MOD_SRC: { id: ModSource; label: string }[] = [
   { id: "fenv", label: "FEG" },
   { id: "vel", label: "Vel" },
   { id: "mod", label: "Mod" },
+  { id: "at", label: "AT" },
 ];
 
 function Cell({ title, children, className }: { title: string; children: React.ReactNode; className?: string }) {
@@ -117,6 +119,7 @@ export function SynthApp() {
   const clockFollow = useSynth((s) => s.clockFollow);
   const clockRunning = useSynth((s) => s.clockRunning);
   const engine = useSynth((s) => s.engine);
+  const arpStep = useSynth((s) => s.arpStep);
   const [nameDraft, setNameDraft] = useState("");
   const [libCat, setLibCat] = useState("All");
   const [libQ, setLibQ] = useState("");
@@ -281,7 +284,10 @@ export function SynthApp() {
             <button
               type="button"
               onClick={toggleMute}
-              className="grid size-10 place-items-center rounded-md bg-elevated text-fg"
+              className={cn(
+                "grid size-10 place-items-center rounded-md",
+                mute ? "bg-accent text-accent-fg" : "bg-elevated text-fg",
+              )}
               aria-label={mute ? "Unmute" : "Mute"}
             >
               {mute ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
@@ -534,6 +540,17 @@ export function SynthApp() {
               >
                 {p.arp.on ? "On" : "Off"}
               </button>
+              <button
+                type="button"
+                title="Latch the current chord after you lift your hands"
+                onClick={() => update(clonePatch(p, { arp: { ...p.arp, hold: !p.arp.hold } }))}
+                className={cn(
+                  "h-10 shrink-0 rounded-md px-3 text-sm font-semibold",
+                  p.arp.hold ? "bg-accent text-accent-fg" : "bg-elevated text-muted",
+                )}
+              >
+                Hold
+              </button>
               <div className="min-w-0 flex-1">
                 <Seg
                   value={p.arp.mode}
@@ -543,7 +560,7 @@ export function SynthApp() {
                       { id: "down", label: "Dn" },
                       { id: "updown", label: "U/D" },
                       { id: "random", label: "Rnd" },
-                      { id: "asplayed", label: "Hld" },
+                      { id: "asplayed", label: "Ord" },
                     ] as { id: ArpMode; label: string }[]
                   }
                   onChange={(mode) => update(clonePatch(p, { arp: { ...p.arp, mode } }))}
@@ -630,6 +647,8 @@ export function SynthApp() {
             </div>
           </Cell>
         </div>
+
+        <PatternBar patch={p} playhead={arpStep} onChange={update} />
 
         <section className="lyra-lib mt-3 rounded-xl bg-surface p-4">
           <h2 className="lyra-cell-title">Library · {factory.length} factory</h2>
@@ -831,21 +850,23 @@ function EnvKnobs({
 
 function LfoCell({ title, lfo, onChange }: { title: string; lfo: LfoParams; onChange: (l: LfoParams) => void }) {
   return (
-    <Cell title={title}>
-      <div className="flex shrink-0 flex-col gap-1">
-        <Seg compact value={lfo.dest} options={LFO_DEST} onChange={(dest) => onChange({ ...lfo, dest })} />
-        <Seg compact value={lfo.wave} options={LFO_WAVE} onChange={(wave) => onChange({ ...lfo, wave })} />
-      </div>
-      <div className="lyra-knobs lyra-knobs-2 mt-3">
-        <Knob
-          label="Rate"
-          value={lfo.rate}
-          min={0.05}
-          max={18}
-          format={(v) => v.toFixed(1)}
-          onChange={(rate) => onChange({ ...lfo, rate })}
-        />
-        <Knob label="Depth" value={lfo.depth} format={fmtPct} onChange={(depth) => onChange({ ...lfo, depth })} />
+    <Cell title={title} className="lyra-lfo">
+      <div className="flex min-h-0 flex-1 flex-col justify-evenly gap-2">
+        <div className="flex shrink-0 flex-col gap-1">
+          <Seg compact value={lfo.dest} options={LFO_DEST} onChange={(dest) => onChange({ ...lfo, dest })} />
+          <Seg compact value={lfo.wave} options={LFO_WAVE} onChange={(wave) => onChange({ ...lfo, wave })} />
+        </div>
+        <div className="lyra-lfo-sliders">
+          <LfoSlider
+            label="Rate"
+            value={lfo.rate}
+            min={0.05}
+            max={18}
+            format={(v) => v.toFixed(1)}
+            onChange={(rate) => onChange({ ...lfo, rate })}
+          />
+          <LfoSlider label="Depth" value={lfo.depth} format={fmtPct} onChange={(depth) => onChange({ ...lfo, depth })} />
+        </div>
       </div>
     </Cell>
   );

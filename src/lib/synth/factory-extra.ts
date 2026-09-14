@@ -1,4 +1,5 @@
 import { P } from "./patch-kit";
+import { stepsFromCode } from "./arp";
 import type { Patch } from "./types";
 
 /** Extra factory patches, grouped by role. */
@@ -152,7 +153,7 @@ export const EXTRA_FACTORY: Patch[] = [
     master: 0.7,
   }),
 
-  // —— Lead (14) ——
+  // —— Lead ——
   P("Lead", "l-fifth", "Fifth Solo", {
     osc1: { wave: "sawtooth", level: 0.9 },
     osc2: { wave: "sawtooth", semitone: 7, level: 0.45 },
@@ -260,6 +261,110 @@ export const EXTRA_FACTORY: Patch[] = [
     fx: { delayMix: 0.14, reverbMix: 0.2, chorusMix: 0.48, delayTime: 0.3, delayFeedback: 0.22, phaserMix: 0.16 },
     polyMode: "poly",
     glide: 0.02,
+  }),
+  P("Lead", "l-howl", "Howl Super", {
+    osc1: { wave: "supersaw", level: 0.86 },
+    osc2: { wave: "supersaw", semitone: 7, fine: 5, level: 0.42 },
+    drive: 0.36,
+    drift: 0.18,
+    velFilt: 0.28,
+    filter: { cutoff: 0.74, resonance: 0.16, envAmount: 0.18, slope: 24 },
+    ampEnv: { attack: 0.012, decay: 0.2, sustain: 0.78, release: 0.32 },
+    lfo2: { rate: 0.22, depth: 0.16, dest: "pan", wave: "sine" },
+    matrix: [
+      { src: "at", dest: "cutoff", amount: 0.42 },
+      { src: "lfo2", dest: "pan", amount: 0.2 },
+      { src: "mod", dest: "cutoff", amount: 0.35 },
+      { src: "vel", dest: "amp", amount: 0.22 },
+    ],
+    unison: { voices: 1, detune: 0.24, spread: 0.68 },
+    fx: { delayMix: 0.22, delayTime: 0.28, delayFeedback: 0.34, reverbMix: 0.14, chorusMix: 0.22, phaserMix: 0.12 },
+    polyMode: "poly",
+    master: 0.54,
+  }),
+  P("Lead", "l-air-super", "Air Super", {
+    osc1: { wave: "supersaw", level: 0.78 },
+    osc2: { wave: "sawtooth", fine: 11, level: 0.48 },
+    drive: 0.18,
+    drift: 0.22,
+    noiseLevel: 0.04,
+    filter: { cutoff: 0.78, resonance: 0.12, envAmount: 0.14, slope: 12 },
+    ampEnv: { attack: 0.03, decay: 0.28, sustain: 0.74, release: 0.4 },
+    lfo: { rate: 0.18, depth: 0.12, dest: "cutoff", wave: "sine" },
+    lfo2: { rate: 0.28, depth: 0.2, dest: "pan", wave: "triangle" },
+    matrix: [
+      { src: "at", dest: "amp", amount: 0.32 },
+      { src: "lfo2", dest: "pan", amount: 0.26 },
+      { src: "mod", dest: "cutoff", amount: 0.28 },
+      { src: "lfo1", dest: "cutoff", amount: 0.16 },
+    ],
+    unison: { voices: 2, detune: 0.18, spread: 0.7 },
+    fx: { delayMix: 0.28, delayTime: 0.34, delayFeedback: 0.38, reverbMix: 0.24, chorusMix: 0.36, phaserMix: 0.18 },
+    polyMode: "poly",
+    master: 0.55,
+  }),
+  P("Lead", "l-super-chor", "Super Chorus", {
+    osc1: { wave: "supersaw", level: 0.8 },
+    osc2: { wave: "sawtooth", fine: 8, level: 0.62 },
+    drive: 0.2,
+    drift: 0.18,
+    filter: { cutoff: 0.66, resonance: 0.16, envAmount: 0.2, slope: 24 },
+    ampEnv: { attack: 0.02, decay: 0.24, sustain: 0.76, release: 0.34 },
+    lfo2: { rate: 0.32, depth: 0.14, dest: "pan", wave: "sine" },
+    matrix: [
+      { src: "at", dest: "cutoff", amount: 0.38 },
+      { src: "lfo2", dest: "pan", amount: 0.18 },
+      { src: "mod", dest: "amp", amount: 0.25 },
+      { src: "vel", dest: "cutoff", amount: 0.2 },
+    ],
+    unison: { voices: 2, detune: 0.2, spread: 0.62 },
+    fx: { delayMix: 0.16, delayTime: 0.3, delayFeedback: 0.26, reverbMix: 0.2, chorusMix: 0.55, phaserMix: 0.2 },
+    polyMode: "poly",
+    glide: 0.02,
+    master: 0.56,
+  }),
+  P("Lead", "l-wide-chor", "Wide Chorus", {
+    osc1: { wave: "sawtooth", level: 0.78 },
+    osc2: { wave: "sawtooth", fine: 12, level: 0.72 },
+    drive: 0.12,
+    drift: 0.24,
+    velFilt: 0.18,
+    filter: { cutoff: 0.64, resonance: 0.14, envAmount: 0.16, slope: 12 },
+    ampEnv: { attack: 0.025, decay: 0.3, sustain: 0.8, release: 0.42 },
+    lfo: { rate: 0.35, depth: 0.08, dest: "pitch", wave: "sine" },
+    lfo2: { rate: 0.14, depth: 0.22, dest: "pan", wave: "triangle" },
+    matrix: [
+      { src: "at", dest: "amp", amount: 0.3 },
+      { src: "lfo2", dest: "pan", amount: 0.28 },
+      { src: "mod", dest: "cutoff", amount: 0.3 },
+      { src: "lfo1", dest: "pitch", amount: 0.06 },
+    ],
+    unison: { voices: 3, detune: 0.22, spread: 0.78 },
+    fx: { delayMix: 0.18, delayTime: 0.32, delayFeedback: 0.28, reverbMix: 0.22, chorusMix: 0.62, phaserMix: 0.18 },
+    polyMode: "poly",
+    glide: 0.015,
+    master: 0.54,
+  }),
+  P("Lead", "l-halo", "Halo Lead", {
+    osc1: { wave: "sawtooth", level: 0.74 },
+    osc2: { wave: "triangle", fine: 8, level: 0.68 },
+    drive: 0.1,
+    drift: 0.28,
+    filter: { cutoff: 0.6, resonance: 0.12, envAmount: 0.18, slope: 12 },
+    ampEnv: { attack: 0.04, decay: 0.35, sustain: 0.78, release: 0.5 },
+    lfo: { rate: 0.12, depth: 0.1, dest: "cutoff", wave: "sine" },
+    lfo2: { rate: 0.18, depth: 0.16, dest: "pan", wave: "sine" },
+    matrix: [
+      { src: "at", dest: "cutoff", amount: 0.45 },
+      { src: "lfo2", dest: "pan", amount: 0.22 },
+      { src: "mod", dest: "amp", amount: 0.28 },
+      { src: "lfo1", dest: "cutoff", amount: 0.14 },
+    ],
+    unison: { voices: 2, detune: 0.18, spread: 0.6 },
+    fx: { delayMix: 0.2, delayTime: 0.36, delayFeedback: 0.3, reverbMix: 0.28, chorusMix: 0.5, phaserMix: 0.28 },
+    polyMode: "poly",
+    glide: 0.03,
+    master: 0.58,
   }),
   P("Lead", "l-porta", "Portamento", {
     osc1: { wave: "sawtooth", level: 0.9 },
@@ -548,6 +653,12 @@ export const EXTRA_FACTORY: Patch[] = [
     filter: { cutoff: 0.56, slope: 12, resonance: 0.08, envAmount: 0.12 },
     ampEnv: { attack: 0.45, decay: 0.7, sustain: 0.78, release: 1.4 },
     fx: { delayMix: 0.12, reverbMix: 0.38, chorusMix: 0.36, delayTime: 0.38, delayFeedback: 0.2 },
+    matrix: [
+      { src: "at", dest: "cutoff", amount: 0.55 },
+      { src: "lfo2", dest: "pan", amount: 0.18 },
+      { src: "mod", dest: "amp", amount: 0.28 },
+      { src: "vel", dest: "amp", amount: 0.12 },
+    ],
   }),
   P("Pad", "p-cluster", "Cluster", {
     osc1: { wave: "sawtooth", level: 0.6 },
@@ -717,7 +828,7 @@ export const EXTRA_FACTORY: Patch[] = [
   P("Sequence", "s-minor", "Minor Run", {
     osc1: { wave: "square", pwm: 0.3, level: 0.82 },
     osc2: { wave: "sawtooth", octave: 1, level: 0.35 },
-    arp: { on: true, mode: "up", rate: "1/16", octaves: 2, gate: 0.48, swing: 0.06, tempo: 126 },
+    arp: { on: true, mode: "up", rate: "1/16", octaves: 2, gate: 0.48, swing: 0.06, tempo: 126, hold: true, pattern: true, steps: stepsFromCode("xxxxuuuuddddxxxx") },
   }),
   P("Sequence", "s-techno", "Techno Seq", {
     osc1: { wave: "sawtooth", level: 0.88 },
@@ -725,7 +836,7 @@ export const EXTRA_FACTORY: Patch[] = [
     drive: 0.22,
     filter: { cutoff: 0.46, resonance: 0.45, envAmount: 0.6 },
     lfo2: { rate: 0.33, depth: 0.14, dest: "res", wave: "triangle" },
-    arp: { on: true, mode: "up", rate: "1/16", octaves: 1, gate: 0.4, swing: 0, tempo: 132 },
+    arp: { on: true, mode: "up", rate: "1/16", octaves: 1, gate: 0.4, swing: 0, tempo: 132, hold: true, pattern: true, steps: stepsFromCode("x.xx.x.xx.xx.x.x") },
   }),
   P("Sequence", "s-trance", "Trance Gate", {
     osc1: { wave: "supersaw", level: 0.75 },
@@ -766,7 +877,7 @@ export const EXTRA_FACTORY: Patch[] = [
   P("Sequence", "s-held", "Held Pattern", {
     osc1: { wave: "sawtooth", level: 0.8 },
     osc2: { wave: "pulse", pwm: 0.3, octave: 1, level: 0.3 },
-    arp: { on: true, mode: "asplayed", rate: "1/16", octaves: 1, gate: 0.52, swing: 0.1, tempo: 128 },
+    arp: { on: true, mode: "asplayed", rate: "1/16", octaves: 1, gate: 0.52, swing: 0.1, tempo: 128, hold: true },
   }),
   P("Sequence", "s-acid", "Acid Seq", {
     osc1: { wave: "sawtooth", octave: -1, level: 1 },
@@ -775,7 +886,7 @@ export const EXTRA_FACTORY: Patch[] = [
     drift: 0.06,
     filter: { cutoff: 0.3, resonance: 0.8, envAmount: 0.75, slope: 24 },
     filterEnv: { attack: 0.002, decay: 0.12, sustain: 0.06, release: 0.06 },
-    arp: { on: true, mode: "up", rate: "1/16", octaves: 1, gate: 0.6, swing: 0.08, tempo: 128 },
+    arp: { on: true, mode: "up", rate: "1/16", octaves: 1, gate: 0.6, swing: 0.08, tempo: 128, hold: true, pattern: true, steps: stepsFromCode("xxxx.xx.xxxx.xx.") },
     polyMode: "legato",
     glide: 0.06,
   }),
@@ -921,6 +1032,12 @@ export const EXTRA_FACTORY: Patch[] = [
     filter: { cutoff: 0.62, slope: 12, resonance: 0.14, envAmount: 0.3 },
     ampEnv: { attack: 0.006, decay: 0.7, sustain: 0.4, release: 0.45 },
     fx: { delayMix: 0.1, reverbMix: 0.28, chorusMix: 0.22, delayTime: 0.32, delayFeedback: 0.2, phaserMix: 0.08 },
+    matrix: [
+      { src: "at", dest: "cutoff", amount: 0.48 },
+      { src: "vel", dest: "cutoff", amount: 0.28 },
+      { src: "mod", dest: "amp", amount: 0.22 },
+      { src: "lfo2", dest: "pan", amount: 0.12 },
+    ],
   }),
   P("Bass", "b-vel-mk2", "Vel Filter Bass", {
     osc1: { wave: "sawtooth", octave: -1, level: 0.92 },
@@ -1104,7 +1221,7 @@ export const EXTRA_FACTORY: Patch[] = [
     lfo: { rate: 0.125, depth: 0.22, dest: "cutoff", wave: "triangle" },
     lfo2: { rate: 0.25, depth: 0.18, dest: "res", wave: "sine" },
     ampEnv: { attack: 0.01, decay: 0.2, sustain: 0.7, release: 0.12 },
-    arp: { on: true, mode: "updown", rate: "1/16", octaves: 1, gate: 0.5, swing: 0.04, tempo: 130 },
+    arp: { on: true, mode: "updown", rate: "1/16", octaves: 1, gate: 0.5, swing: 0.04, tempo: 130, hold: true, pattern: true, steps: stepsFromCode("x.x.x.x.x.x.x.x.") },
   }),
   P("Techno", "t-schranz", "Schranz Lead", {
     osc1: { wave: "sawtooth", octave: 0, level: 0.95 },
@@ -1181,7 +1298,7 @@ export const EXTRA_FACTORY: Patch[] = [
     filter: { cutoff: 0.46, resonance: 0.62, envAmount: 0.48 },
     lfo: { rate: 6.6, depth: 0.18, dest: "cutoff", wave: "square" },
     lfo2: { rate: 0.33, depth: 0.2, dest: "res", wave: "triangle" },
-    arp: { on: true, mode: "random", rate: "1/16", octaves: 2, gate: 0.36, swing: 0.05, tempo: 132 },
+    arp: { on: true, mode: "random", rate: "1/16", octaves: 2, gate: 0.36, swing: 0.05, tempo: 132, hold: true, pattern: true, steps: stepsFromCode("x..x.x.x.xx..x.x") },
     fx: { delayMix: 0.24, delayTime: 0.23, delayFeedback: 0.38, reverbMix: 0.1, chorusMix: 0, phaserMix: 0.12 },
   }),
   P("Techno", "t-res-sweep", "Reso Sweep", {
@@ -1219,6 +1336,12 @@ export const EXTRA_FACTORY: Patch[] = [
     polyMode: "poly",
     fx: { delayMix: 0.2, delayTime: 0.5, delayFeedback: 0.32, reverbMix: 0.42, chorusMix: 0.2, phaserMix: 0.3 },
     master: 0.58,
+    matrix: [
+      { src: "at", dest: "cutoff", amount: 0.6 },
+      { src: "lfo2", dest: "pan", amount: 0.22 },
+      { src: "mod", dest: "amp", amount: 0.25 },
+      { src: "lfo1", dest: "cutoff", amount: 0.16 },
+    ],
   }),
   P("Techno", "t-uk-stomp", "UK Stomp", {
     osc1: { wave: "sawtooth", octave: -1, level: 0.94 },

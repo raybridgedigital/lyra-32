@@ -15,7 +15,7 @@ export function Keyboard() {
   const noteOff = useSynth((s) => s.noteOff);
 
   const start = 36 + octave * 12;
-  const keys = useMemo(() => Array.from({ length: 25 }, (_, i) => start + i), [start]);
+  const keys = useMemo(() => Array.from({ length: 37 }, (_, i) => start + i), [start]);
   const whites = keys.filter((n) => WHITE.includes(n % 12));
 
   const press = (midi: number) => (e: React.PointerEvent) => {

@@ -37,7 +37,7 @@ const CORE: Patch[] = [
       { src: "vel", dest: "cutoff", amount: 0.3 },
       { src: "lfo2", dest: "pan", amount: 0.14 },
       { src: "mod", dest: "cutoff", amount: 0.25 },
-      { src: "vel", dest: "amp", amount: 0.18 },
+      { src: "at", dest: "cutoff", amount: 0.5 },
     ),
     filter: { type: "lowpass", slope: 24, cutoff: 0.62, resonance: 0.18, envAmount: 0.28, keyTrack: 0.35 },
     ampEnv: ampKeys,

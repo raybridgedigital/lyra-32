@@ -93,7 +93,19 @@ type State = {
 
 let midiUnsub: (() => void) | null = null;
 let midiQueued = false;
-const heldKeys = new Set<string>();
+const heldKeys = new Map<string, number>();
+
+function blocksComputerKeys(t: EventTarget | null) {
+  if (!t || !(t instanceof HTMLElement)) return false;
+  if (t.isContentEditable) return true;
+  const tag = t.tagName;
+  if (tag === "TEXTAREA" || tag === "SELECT") return true;
+  if (tag === "INPUT") {
+    const type = (t as HTMLInputElement).type;
+    return type !== "range" && type !== "button" && type !== "checkbox";
+  }
+  return false;
+}
 
 function hookMidi(engine: LyraEngine) {
   if (midiQueued) return;
@@ -112,6 +124,7 @@ function hookMidi(engine: LyraEngine) {
         if (ctl === 64) engine.setSustain(value >= 0.5);
       },
       pitchBend: (semis) => engine.setBend(semis),
+      aftertouch: (v) => engine.setAftertouch(v),
       onStatus: (status, name) => useSynth.setState({ midiStatus: status, midiName: name }),
       onPorts: (ports) => useSynth.setState({ midiPorts: ports }),
       onClock: ({ bpm, running }) => {
@@ -119,7 +132,7 @@ function hookMidi(engine: LyraEngine) {
         const rounded = bpm != null ? Math.round(bpm) : null;
         if (s.clockBpm === rounded && s.clockRunning === running) return;
         useSynth.setState({ clockBpm: rounded, clockRunning: running });
-        if (s.clockFollow) s.engine?.setHostTempo(running ? rounded : s.clockBpm);
+        if (s.clockFollow) s.engine?.setHostTempo(running ? rounded : null);
       },
     }).then((unsub) => {
       midiUnsub = unsub;
@@ -182,7 +195,7 @@ export const useSynth = create<State>((set, get) => ({
   voices: 0,
   octave: 0,
   activeNotes: [],
-  arpStep: 0,
+  arpStep: -1,
   masterMute: false,
   showKeys: typeof window === "undefined" ? true : localStorage.getItem(KEYS_KEY) !== "0",
   engine: null,
@@ -263,7 +276,7 @@ export const useSynth = create<State>((set, get) => ({
   toggleMute: () => {
     const next = !get().masterMute;
     set({ masterMute: next });
-    get().engine?.setMaster(next ? 0 : get().patch.master);
+    get().engine?.setMuted(next);
   },
 
   toggleKeys: () => {
@@ -323,9 +336,7 @@ function clampInt(n: number, a: number, b: number) {
 export function bindComputerKeyboard() {
   const down = (e: KeyboardEvent) => {
     if (e.repeat) return;
-    const t = e.target as HTMLElement | null;
-    if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable))
-      return;
+    if (blocksComputerKeys(e.target)) return;
     const k = e.key.toLowerCase();
     if (k === "z") {
       useSynth.getState().shiftOctave(-1);
@@ -346,22 +357,28 @@ export function bindComputerKeyboard() {
     if (!(k in QWERTY_MAP)) return;
     e.preventDefault();
     if (heldKeys.has(k)) return;
-    heldKeys.add(k);
     const midi = 48 + useSynth.getState().octave * 12 + QWERTY_MAP[k]!;
+    heldKeys.set(k, midi);
     useSynth.getState().noteOn(midi, 0.88);
   };
   const up = (e: KeyboardEvent) => {
     const k = e.key.toLowerCase();
     if (!(k in QWERTY_MAP)) return;
+    const midi = heldKeys.get(k);
     heldKeys.delete(k);
-    const midi = 48 + useSynth.getState().octave * 12 + QWERTY_MAP[k]!;
-    useSynth.getState().noteOff(midi);
+    if (midi != null) useSynth.getState().noteOff(midi);
+  };
+  const flush = () => {
+    for (const midi of heldKeys.values()) useSynth.getState().noteOff(midi);
+    heldKeys.clear();
   };
   window.addEventListener("keydown", down);
   window.addEventListener("keyup", up);
+  window.addEventListener("blur", flush);
   return () => {
     window.removeEventListener("keydown", down);
     window.removeEventListener("keyup", up);
+    window.removeEventListener("blur", flush);
   };
 }
 

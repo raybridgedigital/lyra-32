@@ -192,8 +192,49 @@ export function AmtFader({
         aria-label={label}
         onChange={(e) => onChange(Number(e.target.value))}
         className="lyra-fader min-w-0 flex-1 cursor-pointer"
+        onPointerUp={(e) => e.currentTarget.blur()}
       />
       <span className="w-10 shrink-0 text-right font-mono text-sm tabular-nums text-fg">{Math.round(value * 100)}</span>
     </label>
+  );
+}
+
+export function LfoSlider({
+  label,
+  value,
+  min = 0,
+  max = 1,
+  step = 0.001,
+  format,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min?: number;
+  max?: number;
+  step?: number;
+  format: (v: number) => string;
+  onChange: (v: number) => void;
+}) {
+  const n = typeof value === "number" && Number.isFinite(value) ? value : min;
+  const span = max - min || 1;
+  const t = clamp((n - min) / span, 0, 1);
+  return (
+    <>
+      <span className="lyra-lfo-label">{label}</span>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={n}
+        aria-label={label}
+        className="lyra-fader lyra-lfo-fader min-w-0 cursor-pointer"
+        style={{ ["--fill" as string]: `${(t * 100).toFixed(1)}%` }}
+        onChange={(e) => onChange(Number(e.target.value))}
+        onPointerUp={(e) => e.currentTarget.blur()}
+      />
+      <span className="lyra-lfo-readout">{format(n)}</span>
+    </>
   );
 }

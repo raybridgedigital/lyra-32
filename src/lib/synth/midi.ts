@@ -39,6 +39,7 @@ export type MidiHandlers = {
   noteOff: (note: number) => void;
   cc: (ctl: number, value: number) => void;
   pitchBend: (semis: number) => void;
+  aftertouch?: (value: number) => void;
   onStatus: (status: "ok" | "denied" | "unsupported" | "none", name: string | null) => void;
   onPorts?: (ports: MidiPortInfo[]) => void;
   onClock?: (info: { bpm: number | null; running: boolean }) => void;
@@ -193,6 +194,8 @@ export function parseMidi(data: Uint8Array, h: MidiHandlers) {
     const v14 = (b << 7) | a;
     h.pitchBend(((v14 - 8192) / 8192) * 2);
   } else if (cmd === 0xd0) {
-    h.cc(74, a / 127);
+    h.aftertouch?.(a / 127);
+  } else if (cmd === 0xa0) {
+    h.aftertouch?.(b / 127);
   }
 }

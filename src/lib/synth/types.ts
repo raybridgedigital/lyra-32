@@ -1,3 +1,5 @@
+import type { ArpStep } from "./arp";
+
 export type Waveform =
   | "sine"
   | "triangle"
@@ -14,7 +16,7 @@ export type LfoWave = "sine" | "triangle" | "sawtooth" | "square";
 export type PolyMode = "poly" | "mono" | "legato";
 export type ArpMode = "up" | "down" | "updown" | "random" | "asplayed";
 export type ArpRate = "1/4" | "1/8" | "1/8t" | "1/16" | "1/16t";
-export type ModSource = "lfo1" | "lfo2" | "fenv" | "vel" | "mod";
+export type ModSource = "lfo1" | "lfo2" | "fenv" | "vel" | "mod" | "at";
 export type ModDest = LfoDest;
 
 export type OscParams = {
@@ -29,6 +31,19 @@ export type OscParams = {
 export type LfoParams = { rate: number; depth: number; dest: LfoDest; wave: LfoWave };
 
 export type ModRoute = { src: ModSource; dest: ModDest; amount: number };
+
+export type ArpParams = {
+  on: boolean;
+  hold: boolean;
+  pattern: boolean;
+  mode: ArpMode;
+  rate: ArpRate;
+  octaves: 1 | 2 | 3;
+  gate: number;
+  swing: number;
+  tempo: number;
+  steps: ArpStep[];
+};
 
 export type Patch = {
   id: string;
@@ -69,15 +84,7 @@ export type Patch = {
   glide: number;
   polyMode: PolyMode;
   master: number;
-  arp: {
-    on: boolean;
-    mode: ArpMode;
-    rate: ArpRate;
-    octaves: 1 | 2 | 3;
-    gate: number;
-    swing: number;
-    tempo: number;
-  };
+  arp: ArpParams;
 };
 
 export type MidiStatus = "idle" | "ok" | "denied" | "unsupported" | "none";
