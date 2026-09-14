@@ -1,7 +1,8 @@
 import { useEffect, useRef } from "react";
 import { useSynth } from "@/lib/synth/store";
+import { cn } from "@/lib/cn";
 
-export function Scope() {
+export function Scope({ compact = false }: { compact?: boolean }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engine = useSynth((s) => s.engine);
 
@@ -17,10 +18,10 @@ export function Scope() {
       analyser.getByteTimeDomainData(data);
       const { width, height } = canvas;
       ctx2.clearRect(0, 0, width, height);
-      ctx2.fillStyle = getComputedStyle(canvas).getPropertyValue("--color-ink-soft") || "#141820";
+      ctx2.fillStyle = getComputedStyle(canvas).getPropertyValue("--color-ink-soft") || "#10151c";
       ctx2.fillRect(0, 0, width, height);
       ctx2.strokeStyle = getComputedStyle(canvas).getPropertyValue("--color-accent") || "#c9893a";
-      ctx2.lineWidth = 1.5;
+      ctx2.lineWidth = compact ? 1.25 : 1.5;
       ctx2.beginPath();
       const step = data.length / width;
       for (let x = 0; x < width; x++) {
@@ -34,14 +35,14 @@ export function Scope() {
     };
     raf = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(raf);
-  }, [engine]);
+  }, [engine, compact]);
 
   return (
     <canvas
       ref={canvasRef}
-      width={640}
-      height={120}
-      className="h-24 w-full rounded-lg bg-ink-soft sm:h-28"
+      width={compact ? 220 : 640}
+      height={compact ? 36 : 80}
+      className={cn("w-full rounded-md bg-ink-soft", compact ? "h-9" : "h-16")}
       aria-hidden
     />
   );

@@ -19,7 +19,6 @@ const START_DEG = -135;
 const SWEEP_DEG = 270;
 const CIRC = 2 * Math.PI * R;
 const ARC_LEN = (SWEEP_DEG / 360) * CIRC;
-/** SVG circle strokes start at 3 o'clock; +135° lands that start at 7:30 (min). */
 const TRACK_ROT = 135;
 
 function clamp(n: number, a: number, b: number) {
@@ -41,6 +40,7 @@ export function Knob({
   const span = max - min;
   const t = span === 0 ? 0 : clamp((safe - min) / span, 0, 1);
   const angle = START_DEG + t * SWEEP_DEG;
+  const readout = format ? format(safe) : safe.toFixed(2);
 
   const onPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
     e.preventDefault();
@@ -55,7 +55,7 @@ export function Knob({
     if (!start.current) return;
     const fine = e.shiftKey ? 0.15 : 1;
     const dy = (start.current.y - e.clientY) * fine;
-    const next = start.current.v + (dy / 110) * span;
+    const next = start.current.v + (dy / 90) * span;
     const snapped = Math.round(next / step) * step;
     onChange(clamp(snapped, min, max));
   };
@@ -64,12 +64,13 @@ export function Knob({
   };
 
   return (
-    <div className="flex w-14 flex-col items-center gap-1 sm:w-16">
+    <div className="flex min-w-0 flex-col items-center gap-1">
       <button
         type="button"
-        aria-label={label}
+        aria-label={`${label} ${readout}`}
+        title={`${label} ${readout}`}
         className={cn(
-          "relative size-12 touch-none rounded-full bg-elevated shadow-knob outline-none sm:size-14",
+          "lyra-knob relative touch-none rounded-full bg-elevated shadow-knob outline-none",
           "focus-visible:ring-2 focus-visible:ring-accent/70",
         )}
         onPointerDown={onPointerDown}
@@ -115,40 +116,43 @@ export function Knob({
             />
             <circle cx={CX} cy={CY - R} r="2.4" fill="var(--color-accent)" />
           </g>
-          <circle cx={CX} cy={CY} r="3" fill="var(--color-fg)" opacity="0.35" />
         </svg>
       </button>
-      <div className="text-[0.625rem] font-medium uppercase tracking-wide text-muted">{label}</div>
-      <div className="font-mono text-[0.625rem] tabular-nums text-fg">
-        {format ? format(value) : value.toFixed(2)}
+      <div className="flex max-w-full items-baseline justify-center gap-1 px-0.5">
+        <span className="truncate text-sm font-semibold uppercase tracking-wide text-muted">{label}</span>
+        <span className="shrink-0 font-mono text-sm tabular-nums text-fg">{readout}</span>
       </div>
     </div>
   );
 }
 
-export function ModeRow<T extends string>({
-  label,
+export function Seg<T extends string>({
   value,
   options,
   onChange,
+  label,
+  compact,
 }: {
-  label: string;
   value: T;
-  options: { id: T; label: string }[];
+  options: { id: T; label: string; title?: string }[];
   onChange: (v: T) => void;
+  label?: string;
+  compact?: boolean;
 }) {
   return (
-    <div className="flex flex-col gap-1.5">
-      <div className="text-[0.625rem] font-medium uppercase tracking-wide text-muted">{label}</div>
-      <div className="flex flex-wrap gap-1">
+    <div className="min-w-0 shrink-0">
+      {label ? <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted">{label}</div> : null}
+      <div className="flex min-w-0 rounded-md bg-elevated p-0.5">
         {options.map((o) => (
           <button
             key={o.id}
             type="button"
             onClick={() => onChange(o.id)}
+            title={o.title ?? o.label}
             className={cn(
-              "h-8 rounded-md px-2 text-[0.6875rem] font-medium transition-colors duration-(--motion-quick)",
-              o.id === value ? "bg-accent text-accent-fg" : "bg-elevated text-muted hover:text-fg",
+              "min-w-0 flex-1 truncate rounded-sm px-1 font-semibold transition-colors duration-(--motion-quick)",
+              compact ? "h-8 text-sm" : "h-11 text-base",
+              o.id === value ? "bg-accent text-accent-fg" : "text-muted hover:text-fg",
             )}
           >
             {o.label}
@@ -156,5 +160,40 @@ export function ModeRow<T extends string>({
         ))}
       </div>
     </div>
+  );
+}
+
+export function ModeRow<T extends string>(props: {
+  label: string;
+  value: T;
+  options: { id: T; label: string }[];
+  onChange: (v: T) => void;
+}) {
+  return <Seg {...props} />;
+}
+
+export function AmtFader({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <label className="flex min-w-0 flex-1 items-center gap-2">
+      <input
+        type="range"
+        min={-1}
+        max={1}
+        step={0.01}
+        value={value}
+        aria-label={label}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="lyra-fader min-w-0 flex-1 cursor-pointer"
+      />
+      <span className="w-10 shrink-0 text-right font-mono text-sm tabular-nums text-fg">{Math.round(value * 100)}</span>
+    </label>
   );
 }

@@ -1,4 +1,4 @@
-import type { Patch, Waveform } from "./types";
+import type { LfoDest, LfoParams, Patch, Waveform } from "./types";
 import { midiToFreq } from "./midi";
 import { INIT_PATCH, clonePatch } from "./patches";
 
@@ -58,6 +58,31 @@ function pulseWave(ctx: AudioContext, duty: number): PeriodicWave {
   return ctx.createPeriodicWave(real, imag);
 }
 
+function wtWave(ctx: AudioContext, morph: number): PeriodicWave {
+  const n = 32;
+  const real = new Float32Array(n);
+  const imag = new Float32Array(n);
+  const m = clamp(morph, 0, 1);
+  for (let k = 1; k < n; k++) {
+    const vowel = (k === 1 ? 0.7 : k === 3 ? 0.45 : k === 5 ? 0.22 : 0.08 / k) * (1 - m);
+    const metal = (0.55 / k) * Math.sin(k * 0.7) * m;
+    imag[k] = vowel + metal;
+    real[k] = m * 0.12 * Math.cos(k * 1.3);
+  }
+  return ctx.createPeriodicWave(real, imag);
+}
+
+function syncWave(ctx: AudioContext, ratio: number): PeriodicWave {
+  const n = 48;
+  const real = new Float32Array(n);
+  const imag = new Float32Array(n);
+  const r = clamp(ratio, 1, 12);
+  for (let k = 1; k < n; k++) {
+    imag[k] = (2 / (k * Math.PI)) * Math.sin((k * Math.PI) / r);
+  }
+  return ctx.createPeriodicWave(real, imag);
+}
+
 const ARP_DIV: Record<string, number> = {
   "1/4": 1,
   "1/8": 0.5,
@@ -93,6 +118,8 @@ function makeAudioContext(): AudioContext {
   }
 }
 
+type LfoBank = { lfo1: OscillatorNode; lfo2: OscillatorNode; drift: OscillatorNode };
+
 class Voice {
   readonly midi: number;
   readonly startedAt: number;
@@ -101,23 +128,26 @@ class Voice {
   private vca: GainNode;
   private filters: BiquadFilterNode[];
   private oscs: OscillatorNode[] = [];
+  private osc1s: OscillatorNode[] = [];
+  private osc2s: OscillatorNode[] = [];
   private sources: AudioScheduledSourceNode[] = [];
   private mix: GainNode;
   private pan: StereoPannerNode;
+  private fmGain: GainNode | null = null;
   private dead = false;
   private onEnded: () => void;
   private releaseTimer: number | null = null;
-  private lfoPitch: GainNode | null = null;
-  private lfoCut: GainNode | null = null;
+  private extras: AudioNode[] = [];
 
   constructor(
     ctx: AudioContext,
     dest: AudioNode,
-    lfo: OscillatorNode,
+    lfos: LfoBank,
     patch: Patch,
     midi: number,
     velocity: number,
     bend: number,
+    modWheel: number,
     now: number,
     onEnded: () => void,
   ) {
@@ -143,7 +173,9 @@ class Voice {
     f2.Q.setValueAtTime(0.2 + patch.filter.resonance * 12, now);
     this.filters = patch.filter.slope === 24 ? [f1, f2] : [f1];
 
-    const baseCut = cutoffHz(patch.filter.cutoff, patch.filter.keyTrack, midi);
+    const vel = 0.25 + velocity * 0.75;
+    const velCut = (patch.velFilt ?? 0) * (velocity - 0.5) * 0.5;
+    const baseCut = cutoffHz(clamp(patch.filter.cutoff + velCut, 0, 1), patch.filter.keyTrack, midi);
     const envAmt = patch.filter.envAmount;
     const startCut = clamp(baseCut * Math.pow(0.15, envAmt), 30, 18000);
     const peakCut = clamp(baseCut * Math.pow(8, envAmt), 30, 18000);
@@ -165,7 +197,6 @@ class Voice {
     this.vca.connect(this.pan);
     this.pan.connect(dest);
 
-    const vel = 0.25 + velocity * 0.75;
     const uni = patch.unison.voices;
     this.spawnOsc(patch, "osc1", midi, bend, now, uni);
     this.spawnOsc(patch, "osc2", midi, bend, now, uni);
@@ -196,22 +227,64 @@ class Voice {
       this.sources.push(src);
     }
 
-    if (patch.fmIndex > 0.01 && this.oscs.length >= 2) {
+    const freq0 = midiToFreq(midi, bend);
+    if (patch.fmIndex > 0.01 && this.osc2s[0] && this.osc1s[0]) {
       const fm = ctx.createGain();
-      fm.gain.value = patch.fmIndex * midiToFreq(midi, bend) * 4;
-      this.oscs[1]!.connect(fm);
-      fm.connect(this.oscs[0]!.frequency);
+      fm.gain.value = patch.fmIndex * freq0 * 4;
+      this.osc2s[0].connect(fm);
+      for (const o of this.osc1s) fm.connect(o.frequency);
+      this.fmGain = fm;
+      this.extras.push(fm);
     }
 
-    this.lfoCut = ctx.createGain();
-    this.lfoCut.gain.value = patch.lfo.dest === "cutoff" ? patch.lfo.depth * 2400 : 0;
-    lfo.connect(this.lfoCut);
-    for (const f of this.filters) this.lfoCut.connect(f.detune);
+    const sync = patch.sync ?? 0;
+    if (sync > 0.02 && this.osc2s[0] && this.osc1s[0]) {
+      const g = ctx.createGain();
+      g.gain.value = sync * freq0 * 8;
+      this.osc2s[0].connect(g);
+      for (const o of this.osc1s) g.connect(o.frequency);
+      this.extras.push(g);
+      const ratio = 1 + sync * 7;
+      try {
+        this.osc1s[0].setPeriodicWave(syncWave(ctx, ratio));
+      } catch {
+        /* */
+      }
+    }
 
-    this.lfoPitch = ctx.createGain();
-    this.lfoPitch.gain.value = patch.lfo.dest === "pitch" ? patch.lfo.depth * 40 : 0;
-    lfo.connect(this.lfoPitch);
-    for (const o of this.oscs) this.lfoPitch.connect(o.detune);
+    const ring = patch.ring ?? 0;
+    if (ring > 0.02 && this.osc1s[0] && this.osc2s[0]) {
+      const rg = ctx.createGain();
+      rg.gain.value = 0;
+      this.osc2s[0].connect(rg.gain);
+      this.osc1s[0].connect(rg);
+      const wet = ctx.createGain();
+      wet.gain.value = ring * 0.55;
+      rg.connect(wet);
+      wet.connect(this.mix);
+      this.extras.push(rg, wet);
+    }
+
+    const drift = patch.drift ?? 0;
+    if (drift > 0.01) {
+      const g = ctx.createGain();
+      g.gain.value = drift * 22;
+      lfos.drift.connect(g);
+      for (const o of this.oscs) g.connect(o.detune);
+      this.extras.push(g);
+    }
+
+    this.routeLfo(lfos.lfo1, patch.lfo, 1);
+    this.routeLfo(lfos.lfo2, patch.lfo2, 1);
+    for (const row of patch.matrix ?? []) {
+      if (Math.abs(row.amount) < 0.01) continue;
+      if (row.src === "lfo1") this.routeLfo(lfos.lfo1, { ...patch.lfo, dest: row.dest, depth: row.amount }, 1);
+      else if (row.src === "lfo2") this.routeLfo(lfos.lfo2, { ...patch.lfo2, dest: row.dest, depth: row.amount }, 1);
+      else if (row.src === "mod" && row.dest === "cutoff") {
+        const extra = cutoffHz(clamp(patch.filter.cutoff + modWheel * row.amount * 0.4, 0, 1), patch.filter.keyTrack, midi);
+        for (const f of this.filters) f.frequency.setTargetAtTime(extra, now, 0.02);
+      }
+    }
 
     const peak = vel * 0.38;
     const a = Math.max(0.003, patch.ampEnv.attack);
@@ -220,6 +293,42 @@ class Voice {
     this.vca.gain.setValueAtTime(0.0001, now);
     this.vca.gain.linearRampToValueAtTime(peak, now + a);
     this.vca.gain.setTargetAtTime(s, now + a, d / 3);
+  }
+
+  private routeLfo(lfo: OscillatorNode, spec: LfoParams, scale: number) {
+    const depth = (spec?.depth ?? 0) * scale;
+    if (!spec || Math.abs(depth) < 0.008) return;
+    const ctx = this.ctx;
+    const g = ctx.createGain();
+    const dest: LfoDest = spec.dest ?? "cutoff";
+    if (dest === "cutoff") {
+      g.gain.value = depth * 2400;
+      lfo.connect(g);
+      for (const f of this.filters) g.connect(f.detune);
+    } else if (dest === "pitch") {
+      g.gain.value = depth * 40;
+      lfo.connect(g);
+      for (const o of this.oscs) g.connect(o.detune);
+    } else if (dest === "pan") {
+      g.gain.value = depth * 0.75;
+      lfo.connect(g);
+      g.connect(this.pan.pan);
+    } else if (dest === "amp") {
+      g.gain.value = depth * 0.22;
+      lfo.connect(g);
+      g.connect(this.vca.gain);
+    } else if (dest === "res") {
+      g.gain.value = depth * 10;
+      lfo.connect(g);
+      for (const f of this.filters) g.connect(f.Q);
+    } else if (dest === "fm" && this.fmGain) {
+      g.gain.value = depth * 800;
+      lfo.connect(g);
+      g.connect(this.fmGain.gain);
+    } else {
+      return;
+    }
+    this.extras.push(g);
   }
 
   private spawnOsc(patch: Patch, which: "osc1" | "osc2", midi: number, bend: number, now: number, uni: number) {
@@ -255,6 +364,8 @@ class Voice {
       o.start(now);
       this.oscs.push(o);
       this.sources.push(o);
+      if (which === "osc1") this.osc1s.push(o);
+      else this.osc2s.push(o);
     }
   }
 
@@ -283,9 +394,8 @@ class Voice {
       const f = midiToFreq(note, bend) * Math.pow(2, fine / 1200);
       o.frequency.setTargetAtTime(f, when, t / 3);
     };
-    for (const o of this.oscs) {
-      retune(o, midi + patch.osc1.octave * 12 + patch.osc1.semitone, patch.osc1.fine);
-    }
+    for (const o of this.osc1s) retune(o, midi + patch.osc1.octave * 12 + patch.osc1.semitone, patch.osc1.fine);
+    for (const o of this.osc2s) retune(o, midi + patch.osc2.octave * 12 + patch.osc2.semitone, patch.osc2.fine);
   }
 
   release(patch: Patch) {
@@ -322,12 +432,17 @@ class Voice {
         /* */
       }
     }
+    for (const n of this.extras) {
+      try {
+        n.disconnect();
+      } catch {
+        /* */
+      }
+    }
     try {
       this.vca.disconnect();
       this.mix.disconnect();
       this.pan.disconnect();
-      this.lfoCut?.disconnect();
-      this.lfoPitch?.disconnect();
     } catch {
       /* */
     }
@@ -348,6 +463,10 @@ function noiseBuf(ctx: AudioContext) {
 function applyWave(ctx: AudioContext, o: OscillatorNode, wave: Waveform, pwm: number) {
   if (wave === "pulse") {
     o.setPeriodicWave(pulseWave(ctx, pwm));
+    return;
+  }
+  if (wave === "wt") {
+    o.setPeriodicWave(wtWave(ctx, pwm));
     return;
   }
   if (wave === "supersaw") {
@@ -386,8 +505,10 @@ export class LyraEngine {
     dry: GainNode;
     master: GainNode;
     limiter: DynamicsCompressorNode;
+    phaserGain: GainNode;
+    phaserLfo: OscillatorNode;
   };
-  private lfo: OscillatorNode;
+  private lfos: LfoBank;
   private arpHeld: number[] = [];
   private arpTimer: number | null = null;
   private arpIndex = 0;
@@ -433,6 +554,30 @@ export class LyraEngine {
     revWet.gain.value = 0.18;
     conv.connect(revWet);
 
+    const phaserIn = ctx.createGain();
+    let phNode: AudioNode = phaserIn;
+    const phasers: BiquadFilterNode[] = [];
+    for (let i = 0; i < 4; i++) {
+      const ap = ctx.createBiquadFilter();
+      ap.type = "allpass";
+      ap.frequency.value = 480 + i * 420;
+      ap.Q.value = 1.2;
+      phNode.connect(ap);
+      phNode = ap;
+      phasers.push(ap);
+    }
+    const phaserLfo = ctx.createOscillator();
+    phaserLfo.type = "sine";
+    phaserLfo.frequency.value = 0.22;
+    const phDepth = ctx.createGain();
+    phDepth.gain.value = 700;
+    phaserLfo.connect(phDepth);
+    for (const ap of phasers) phDepth.connect(ap.frequency);
+    phaserLfo.start();
+    const phaserGain = ctx.createGain();
+    phaserGain.gain.value = 0;
+    phNode.connect(phaserGain);
+
     const master = ctx.createGain();
     master.gain.value = 0.85;
     const limiter = ctx.createDynamicsCompressor();
@@ -451,10 +596,12 @@ export class LyraEngine {
     chorusDelay.connect(chorusGain);
     voice.connect(delay);
     voice.connect(conv);
+    voice.connect(phaserIn);
     dry.connect(master);
     chorusGain.connect(master);
     delayWet.connect(master);
     revWet.connect(master);
+    phaserGain.connect(master);
     master.connect(limiter);
     limiter.connect(analyser);
     analyser.connect(ctx.destination);
@@ -473,12 +620,24 @@ export class LyraEngine {
       dry,
       master,
       limiter,
+      phaserGain,
+      phaserLfo,
     };
 
-    this.lfo = ctx.createOscillator();
-    this.lfo.type = "sine";
-    this.lfo.frequency.value = 0.35;
-    this.lfo.start();
+    const lfo1 = ctx.createOscillator();
+    lfo1.type = "sine";
+    lfo1.frequency.value = 0.35;
+    lfo1.start();
+    const lfo2 = ctx.createOscillator();
+    lfo2.type = "triangle";
+    lfo2.frequency.value = 0.35;
+    lfo2.start();
+    const drift = ctx.createOscillator();
+    drift.type = "sine";
+    drift.frequency.value = 0.11;
+    drift.start();
+    this.lfos = { lfo1, lfo2, drift };
+
     this.started = true;
     this.applyPatch(this.patch);
     listener.onState?.(ctx.state);
@@ -501,9 +660,12 @@ export class LyraEngine {
     this.buses.delayFb.gain.setTargetAtTime(clamp(fx.delayFeedback, 0, 0.85), now, 0.03);
     this.buses.revWet.gain.setTargetAtTime(fx.reverbMix, now, 0.04);
     this.buses.chorusGain.gain.setTargetAtTime(fx.chorusMix * 0.7, now, 0.04);
+    this.buses.phaserGain.gain.setTargetAtTime((fx.phaserMix ?? 0) * 0.65, now, 0.04);
     this.buses.master.gain.setTargetAtTime(clamp(this.patch.master, 0, 1), now, 0.03);
-    this.lfo.frequency.setTargetAtTime(clamp(this.patch.lfo.rate, 0.02, 30), now, 0.02);
-    this.lfo.type = this.patch.lfo.wave;
+    this.lfos.lfo1.frequency.setTargetAtTime(clamp(this.patch.lfo.rate, 0.02, 30), now, 0.02);
+    this.lfos.lfo1.type = this.patch.lfo.wave;
+    this.lfos.lfo2.frequency.setTargetAtTime(clamp(this.patch.lfo2.rate, 0.02, 30), now, 0.02);
+    this.lfos.lfo2.type = this.patch.lfo2.wave;
     const q = 0.2 + this.patch.filter.resonance * 18;
     for (const v of this.voices) {
       const hz = cutoffHz(this.patch.filter.cutoff + this.cutoffMod * 0.35, this.patch.filter.keyTrack, v.midi);
@@ -602,11 +764,12 @@ export class LyraEngine {
     const v = new Voice(
       this.ctx,
       this.buses.voice,
-      this.lfo,
+      this.lfos,
       this.patch,
       midi,
       velocity,
       this.bend,
+      this.cutoffMod,
       now,
       () => {
         this.voices = this.voices.filter((x) => x !== v);

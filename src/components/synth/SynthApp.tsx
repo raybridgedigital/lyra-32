@@ -19,46 +19,74 @@ import type {
   FilterSlope,
   FilterType,
   LfoDest,
+  LfoParams,
   LfoWave,
+  ModDest,
+  ModRoute,
+  ModSource,
   Patch,
   PolyMode,
   Waveform,
 } from "@/lib/synth/types";
 import { Keyboard } from "./Keyboard";
-import { Knob, ModeRow } from "./Knob";
+import { AmtFader, Knob, Seg } from "./Knob";
 import { Scope } from "./Scope";
-
-function Panel({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="rounded-2xl bg-surface p-3 sm:p-4">
-      <h2 className="mb-3 font-display text-xs font-semibold uppercase tracking-[0.16em] text-muted">{title}</h2>
-      {children}
-    </section>
-  );
-}
 
 function fmtHz(v: number) {
   const hz = 20 * Math.pow(1000, v);
   return hz >= 1000 ? `${(hz / 1000).toFixed(1)}k` : `${Math.round(hz)}`;
 }
 function fmtMs(v: number) {
-  return v < 1 ? `${Math.round(v * 1000)}ms` : `${v.toFixed(2)}s`;
+  return v < 1 ? `${Math.round(v * 1000)}` : `${v.toFixed(1)}s`;
 }
 function fmtPct(v: number) {
   return `${Math.round(v * 100)}`;
 }
 
-const WAVES: { id: Waveform; label: string }[] = [
+const WAVES: { id: Waveform; label: string; title: string }[] = [
+  { id: "sine", label: "Sin", title: "Sine" },
+  { id: "triangle", label: "Tri", title: "Triangle" },
+  { id: "sawtooth", label: "Saw", title: "Sawtooth" },
+  { id: "square", label: "Sqr", title: "Square" },
+  { id: "pulse", label: "Pul", title: "Pulse" },
+  { id: "supersaw", label: "Stk", title: "Stack" },
+  { id: "wt", label: "Tbl", title: "Wavetable" },
+];
+
+const LFO_DEST: { id: LfoDest; label: string }[] = [
+  { id: "cutoff", label: "Cut" },
+  { id: "pitch", label: "Pch" },
+  { id: "pan", label: "Pan" },
+  { id: "amp", label: "Amp" },
+  { id: "res", label: "Res" },
+  { id: "fm", label: "FM" },
+];
+
+const LFO_WAVE: { id: LfoWave; label: string }[] = [
   { id: "sine", label: "Sin" },
   { id: "triangle", label: "Tri" },
   { id: "sawtooth", label: "Saw" },
   { id: "square", label: "Sqr" },
-  { id: "pulse", label: "Pulse" },
-  { id: "supersaw", label: "Stack" },
 ];
 
+const MOD_SRC: { id: ModSource; label: string }[] = [
+  { id: "lfo1", label: "LFO1" },
+  { id: "lfo2", label: "LFO2" },
+  { id: "fenv", label: "FEG" },
+  { id: "vel", label: "Vel" },
+  { id: "mod", label: "Mod" },
+];
+
+function Cell({ title, children, className }: { title: string; children: React.ReactNode; className?: string }) {
+  return (
+    <section className={cn("lyra-cell", className)}>
+      <h2 className="lyra-cell-title">{title}</h2>
+      {children}
+    </section>
+  );
+}
+
 export function SynthApp() {
-  const armed = useSynth((s) => s.armed);
   const ctxState = useSynth((s) => s.ctxState);
   const patch = useSynth((s) => s.patch);
   const setPatch = useSynth((s) => s.setPatch);
@@ -75,8 +103,8 @@ export function SynthApp() {
   const panic = useSynth((s) => s.panic);
   const mute = useSynth((s) => s.masterMute);
   const toggleMute = useSynth((s) => s.toggleMute);
-  const noteOn = useSynth((s) => s.noteOn);
-  const noteOff = useSynth((s) => s.noteOff);
+  const showKeys = useSynth((s) => s.showKeys);
+  const toggleKeys = useSynth((s) => s.toggleKeys);
   const engine = useSynth((s) => s.engine);
   const [nameDraft, setNameDraft] = useState("");
   const [libCat, setLibCat] = useState("All");
@@ -118,56 +146,39 @@ export function SynthApp() {
     if (next) loadPatch(next);
   };
 
+  const setMatrix = (i: number, row: ModRoute) => {
+    const matrix = [...p.matrix];
+    matrix[i] = row;
+    update(clonePatch(p, { matrix }));
+  };
+
   return (
-    <div className="min-h-dvh overflow-x-hidden bg-bg pb-52 text-fg" data-audio={ctxState}>
-      <header className="sticky top-0 z-20 border-b border-border bg-bg/90 px-3 py-3 backdrop-blur-sm sm:px-5">
-        <div className="mx-auto flex max-w-6xl flex-col gap-3">
-          <div className="flex items-center gap-3">
-            <div className="min-w-0 flex-1">
-              <div className="font-display text-[0.65rem] uppercase tracking-[0.2em] text-accent">LYRA-32</div>
-              <div className="truncate font-display text-lg font-semibold tracking-tight">{p.name}</div>
+    <div
+      className={cn("flex min-h-dvh flex-col overflow-x-hidden bg-bg text-fg", showKeys ? "pb-24" : "pb-4")}
+      data-audio={ctxState}
+    >
+      <header className="sticky top-0 z-20 border-b border-border bg-bg/95 px-3 py-1.5 backdrop-blur-sm">
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="lyra-brand min-w-0 font-display text-lg font-bold tracking-tight text-accent sm:text-xl">
+              <span>LYRA-32</span>
+              <span className="lyra-byline">by Ray Bridge Digital</span>
             </div>
-            <div
-              className={cn(
-                "hidden h-11 items-center rounded-lg px-3 text-xs font-medium sm:flex",
-                live ? "bg-elevated text-accent" : "bg-elevated text-muted",
-              )}
-            >
-              {live ? "Sound on" : "Press a key"}
-            </div>
-            <MidiBadge status={midiStatus} name={midiName} />
-            <div className="flex items-center gap-1 font-mono text-xs tabular-nums text-muted">
-              <Activity className="size-3.5" />
-              <span>{voices}</span>
-            </div>
-            <button
-              type="button"
-              onClick={toggleMute}
-              className="grid size-11 place-items-center rounded-lg bg-elevated text-fg"
-              aria-label={mute ? "Unmute" : "Mute"}
-            >
-              {mute ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
-            </button>
-            <button
-              type="button"
-              onClick={panic}
-              className="h-11 rounded-lg bg-elevated px-3 text-xs font-medium text-muted hover:text-fg"
-            >
-              Panic
-            </button>
+            <div className="ml-auto hidden w-36 shrink-0 lg:block">{engine ? <Scope compact /> : <div className="h-9 rounded-md bg-ink-soft" />}</div>
           </div>
-          <div className="flex items-center gap-2">
+
+          <div className="flex items-center justify-center gap-1">
             <button
               type="button"
               aria-label="Previous patch"
-              className="grid size-11 shrink-0 place-items-center rounded-lg bg-elevated text-fg"
+              className="grid size-10 shrink-0 place-items-center rounded-md bg-elevated text-fg"
               onClick={() => stepPatch(-1)}
             >
               <ChevronLeft className="size-4" />
             </button>
             <select
               aria-label="Load patch"
-              className="h-11 min-w-0 flex-1 rounded-lg bg-elevated px-3 text-sm text-fg"
+              className="lyra-patch-select h-10 w-44 shrink-0 rounded-md bg-elevated px-2 text-base text-fg sm:w-56"
               value={p.id}
               onChange={(e) => {
                 const found = allPatches.find((x) => x.id === e.target.value);
@@ -196,25 +207,73 @@ export function SynthApp() {
             <button
               type="button"
               aria-label="Next patch"
-              className="grid size-11 shrink-0 place-items-center rounded-lg bg-elevated text-fg"
+              className="grid size-10 shrink-0 place-items-center rounded-md bg-elevated text-fg"
               onClick={() => stepPatch(1)}
             >
               <ChevronRight className="size-4" />
             </button>
           </div>
+
+          <div className="flex min-w-0 items-center gap-2">
+            <div
+              className={cn(
+                "hidden h-10 w-14 shrink-0 items-center justify-center rounded-md text-sm font-semibold md:flex",
+                live ? "text-accent" : "text-muted",
+              )}
+            >
+              {live ? "Live" : "Idle"}
+            </div>
+            <MidiBadge status={midiStatus} name={midiName} />
+            <div className="ml-auto flex items-center gap-2">
+            <div
+              className="flex h-10 w-12 shrink-0 items-center justify-center gap-1 font-mono text-sm tabular-nums text-muted"
+            >
+              <Activity className="size-3.5 shrink-0" />
+              <span className="w-5 text-right">{voices}</span>
+            </div>
+            <div className="flex items-center">
+              <button type="button" className="h-10 rounded-l-md bg-elevated px-2.5 text-base font-semibold" onClick={() => shiftOctave(-1)}>
+                −
+              </button>
+              <span className="h-10 bg-elevated px-2 font-mono text-base font-semibold leading-10 tabular-nums text-muted">C{3 + octave}</span>
+              <button type="button" className="h-10 rounded-r-md bg-elevated px-2.5 text-base font-semibold" onClick={() => shiftOctave(1)}>
+                +
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={toggleKeys}
+              className={cn("grid size-10 place-items-center rounded-md", showKeys ? "bg-accent text-accent-fg" : "bg-elevated text-fg")}
+              aria-label={showKeys ? "Hide on-screen keyboard" : "Show on-screen keyboard"}
+              title={showKeys ? "Hide keyboard" : "Show keyboard"}
+            >
+              <KeyboardIcon className="size-4" />
+            </button>
+            <button
+              type="button"
+              onClick={toggleMute}
+              className="grid size-10 place-items-center rounded-md bg-elevated text-fg"
+              aria-label={mute ? "Unmute" : "Mute"}
+            >
+              {mute ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
+            </button>
+            <button
+              type="button"
+              onClick={panic}
+              className="h-10 rounded-md bg-elevated px-3 text-base font-semibold text-muted hover:text-fg"
+            >
+              Panic
+            </button>
+            </div>
+          </div>
         </div>
       </header>
 
-      <main className="mx-auto grid max-w-6xl gap-3 p-3 sm:p-5">
-        <div className="grid gap-3 lg:grid-cols-2">
-          <Panel title="Oscillator 1">
-            <ModeRow
-              label="Wave"
-              value={p.osc1.wave}
-              options={WAVES}
-              onChange={(wave) => update(clonePatch(p, { osc1: { ...p.osc1, wave } }))}
-            />
-            <div className="mt-3 flex flex-wrap justify-between gap-2">
+      <main className="flex min-h-0 w-full flex-1 flex-col px-1 py-1 sm:px-2">
+        <div className={cn("lyra-face", showKeys && "keys-on")}>
+          <Cell title="Oscillator 1">
+            <Seg value={p.osc1.wave} options={WAVES} onChange={(wave) => update(clonePatch(p, { osc1: { ...p.osc1, wave } }))} />
+            <div className="lyra-knobs mt-2">
               <Knob
                 label="Oct"
                 value={p.osc1.octave}
@@ -232,7 +291,7 @@ export function SynthApp() {
                 max={50}
                 step={1}
                 defaultValue={0}
-                format={(v) => `${v}c`}
+                format={(v) => `${v}¢`}
                 onChange={(fine) => update(clonePatch(p, { osc1: { ...p.osc1, fine } }))}
               />
               <Knob
@@ -243,22 +302,18 @@ export function SynthApp() {
                 onChange={(level) => update(clonePatch(p, { osc1: { ...p.osc1, level } }))}
               />
               <Knob
-                label="PWM"
+                label={p.osc1.wave === "wt" ? "Morph" : "PWM"}
                 value={p.osc1.pwm}
                 defaultValue={0.5}
                 format={fmtPct}
                 onChange={(pwm) => update(clonePatch(p, { osc1: { ...p.osc1, pwm } }))}
               />
             </div>
-          </Panel>
-          <Panel title="Oscillator 2">
-            <ModeRow
-              label="Wave"
-              value={p.osc2.wave}
-              options={WAVES}
-              onChange={(wave) => update(clonePatch(p, { osc2: { ...p.osc2, wave } }))}
-            />
-            <div className="mt-3 flex flex-wrap justify-between gap-2">
+          </Cell>
+
+          <Cell title="Oscillator 2">
+            <Seg value={p.osc2.wave} options={WAVES} onChange={(wave) => update(clonePatch(p, { osc2: { ...p.osc2, wave } }))} />
+            <div className="lyra-knobs mt-2">
               <Knob
                 label="Oct"
                 value={p.osc2.octave}
@@ -276,7 +331,7 @@ export function SynthApp() {
                 max={50}
                 step={1}
                 defaultValue={7}
-                format={(v) => `${v}c`}
+                format={(v) => `${v}¢`}
                 onChange={(fine) => update(clonePatch(p, { osc2: { ...p.osc2, fine } }))}
               />
               <Knob
@@ -286,78 +341,59 @@ export function SynthApp() {
                 format={fmtPct}
                 onChange={(level) => update(clonePatch(p, { osc2: { ...p.osc2, level } }))}
               />
-              <Knob
-                label="FM"
-                value={p.fmIndex}
-                defaultValue={0}
-                format={fmtPct}
-                onChange={(fmIndex) => update(clonePatch(p, { fmIndex }))}
-              />
+              <Knob label="FM" value={p.fmIndex} defaultValue={0} format={fmtPct} onChange={(fmIndex) => update(clonePatch(p, { fmIndex }))} />
             </div>
-          </Panel>
-        </div>
+          </Cell>
 
-        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-          <Panel title="Mixer">
-            <div className="flex flex-wrap justify-between gap-2">
-              <Knob label="Sub" value={p.subLevel} format={fmtPct} onChange={(subLevel) => update(clonePatch(p, { subLevel }))} />
-              <Knob
-                label="Noise"
-                value={p.noiseLevel}
-                format={fmtPct}
-                onChange={(noiseLevel) => update(clonePatch(p, { noiseLevel }))}
-              />
-              <Knob label="Drive" value={p.drive} format={fmtPct} onChange={(drive) => update(clonePatch(p, { drive }))} />
-              <Knob
-                label="Glide"
-                value={p.glide}
-                format={fmtPct}
-                onChange={(glide) => update(clonePatch(p, { glide }))}
-              />
-            </div>
-            <div className="mt-3">
-              <ModeRow
-                label="Voice"
-                value={p.polyMode}
-                options={
-                  [
-                    { id: "poly", label: "Poly" },
-                    { id: "mono", label: "Mono" },
-                    { id: "legato", label: "Legato" },
-                  ] as { id: PolyMode; label: string }[]
-                }
-                onChange={(polyMode) => update(clonePatch(p, { polyMode }))}
-              />
-            </div>
-          </Panel>
-
-          <Panel title="Filter">
-            <ModeRow
-              label="Type"
-              value={p.filter.type}
+          <Cell title="Mixer">
+            <Seg
+              compact
+              value={p.polyMode}
               options={
                 [
-                  { id: "lowpass", label: "LP" },
-                  { id: "highpass", label: "HP" },
-                  { id: "bandpass", label: "BP" },
-                ] as { id: FilterType; label: string }[]
+                  { id: "poly", label: "Poly" },
+                  { id: "mono", label: "Mono" },
+                  { id: "legato", label: "Leg" },
+                ] as { id: PolyMode; label: string }[]
               }
-              onChange={(type) => update(clonePatch(p, { filter: { ...p.filter, type } }))}
+              onChange={(polyMode) => update(clonePatch(p, { polyMode }))}
             />
-            <div className="mt-2">
-              <ModeRow
-                label="Slope"
+            <div className="lyra-knobs mt-3">
+              <Knob label="Sub" value={p.subLevel} format={fmtPct} onChange={(subLevel) => update(clonePatch(p, { subLevel }))} />
+              <Knob label="Noise" value={p.noiseLevel} format={fmtPct} onChange={(noiseLevel) => update(clonePatch(p, { noiseLevel }))} />
+              <Knob label="Drive" value={p.drive} format={fmtPct} onChange={(drive) => update(clonePatch(p, { drive }))} />
+              <Knob label="Ring" value={p.ring} format={fmtPct} onChange={(ring) => update(clonePatch(p, { ring }))} />
+              <Knob label="Sync" value={p.sync} format={fmtPct} onChange={(sync) => update(clonePatch(p, { sync }))} />
+              <Knob label="Drift" value={p.drift} format={fmtPct} onChange={(drift) => update(clonePatch(p, { drift }))} />
+              <Knob label="Glide" value={p.glide} format={fmtPct} onChange={(glide) => update(clonePatch(p, { glide }))} />
+              <Knob label="Out" value={p.master} format={fmtPct} onChange={(master) => update(clonePatch(p, { master }))} />
+            </div>
+          </Cell>
+
+          <Cell title="Filter">
+            <div className="flex flex-col gap-1">
+              <Seg
+                value={p.filter.type}
+                options={
+                  [
+                    { id: "lowpass", label: "LP" },
+                    { id: "highpass", label: "HP" },
+                    { id: "bandpass", label: "BP" },
+                    { id: "notch", label: "N" },
+                  ] as { id: FilterType; label: string }[]
+                }
+                onChange={(type) => update(clonePatch(p, { filter: { ...p.filter, type } }))}
+              />
+              <Seg
                 value={String(p.filter.slope) as "12" | "24"}
                 options={[
                   { id: "12", label: "12 dB" },
                   { id: "24", label: "24 dB" },
                 ]}
-                onChange={(s) =>
-                  update(clonePatch(p, { filter: { ...p.filter, slope: Number(s) as FilterSlope } }))
-                }
+                onChange={(s) => update(clonePatch(p, { filter: { ...p.filter, slope: Number(s) as FilterSlope } }))}
               />
             </div>
-            <div className="mt-3 flex flex-wrap justify-between gap-2">
+            <div className="lyra-knobs lyra-knobs-5 mt-2">
               <Knob
                 label="Cut"
                 value={p.filter.cutoff}
@@ -383,120 +419,22 @@ export function SynthApp() {
                 format={fmtPct}
                 onChange={(keyTrack) => update(clonePatch(p, { filter: { ...p.filter, keyTrack } }))}
               />
+              <Knob label="Vel" value={p.velFilt} format={fmtPct} onChange={(velFilt) => update(clonePatch(p, { velFilt }))} />
             </div>
-          </Panel>
+          </Cell>
 
-          <Panel title="Amp / Filter EG">
-            <div className="text-[0.625rem] uppercase tracking-wide text-subtle">Amp</div>
-            <div className="mt-1 flex flex-wrap justify-between gap-2">
-              <Knob
-                label="A"
-                value={p.ampEnv.attack}
-                min={0.001}
-                max={4}
-                format={fmtMs}
-                onChange={(attack) => update(clonePatch(p, { ampEnv: { ...p.ampEnv, attack } }))}
-              />
-              <Knob
-                label="D"
-                value={p.ampEnv.decay}
-                min={0.01}
-                max={4}
-                format={fmtMs}
-                onChange={(decay) => update(clonePatch(p, { ampEnv: { ...p.ampEnv, decay } }))}
-              />
-              <Knob
-                label="S"
-                value={p.ampEnv.sustain}
-                format={fmtPct}
-                onChange={(sustain) => update(clonePatch(p, { ampEnv: { ...p.ampEnv, sustain } }))}
-              />
-              <Knob
-                label="R"
-                value={p.ampEnv.release}
-                min={0.01}
-                max={8}
-                format={fmtMs}
-                onChange={(release) => update(clonePatch(p, { ampEnv: { ...p.ampEnv, release } }))}
-              />
-            </div>
-            <div className="mt-3 text-[0.625rem] uppercase tracking-wide text-subtle">Filter</div>
-            <div className="mt-1 flex flex-wrap justify-between gap-2">
-              <Knob
-                label="A"
-                value={p.filterEnv.attack}
-                min={0.001}
-                max={4}
-                format={fmtMs}
-                onChange={(attack) => update(clonePatch(p, { filterEnv: { ...p.filterEnv, attack } }))}
-              />
-              <Knob
-                label="D"
-                value={p.filterEnv.decay}
-                min={0.01}
-                max={4}
-                format={fmtMs}
-                onChange={(decay) => update(clonePatch(p, { filterEnv: { ...p.filterEnv, decay } }))}
-              />
-              <Knob
-                label="S"
-                value={p.filterEnv.sustain}
-                format={fmtPct}
-                onChange={(sustain) => update(clonePatch(p, { filterEnv: { ...p.filterEnv, sustain } }))}
-              />
-              <Knob
-                label="R"
-                value={p.filterEnv.release}
-                min={0.01}
-                max={8}
-                format={fmtMs}
-                onChange={(release) => update(clonePatch(p, { filterEnv: { ...p.filterEnv, release } }))}
-              />
-            </div>
-          </Panel>
+          <Cell title="Amp EG">
+            <EnvKnobs env={p.ampEnv} onChange={(ampEnv) => update(clonePatch(p, { ampEnv }))} />
+          </Cell>
+          <Cell title="Filter EG">
+            <EnvKnobs env={p.filterEnv} onChange={(filterEnv) => update(clonePatch(p, { filterEnv }))} />
+          </Cell>
 
-          <Panel title="LFO / FX">
-            <ModeRow
-              label="LFO dest"
-              value={p.lfo.dest}
-              options={
-                [
-                  { id: "cutoff", label: "Cutoff" },
-                  { id: "pitch", label: "Pitch" },
-                ] as { id: LfoDest; label: string }[]
-              }
-              onChange={(dest) => update(clonePatch(p, { lfo: { ...p.lfo, dest } }))}
-            />
-            <div className="mt-2">
-              <ModeRow
-                label="Shape"
-                value={p.lfo.wave}
-                options={
-                  [
-                    { id: "sine", label: "Sin" },
-                    { id: "triangle", label: "Tri" },
-                    { id: "sawtooth", label: "Saw" },
-                    { id: "square", label: "Sqr" },
-                  ] as { id: LfoWave; label: string }[]
-                }
-                onChange={(wave) => update(clonePatch(p, { lfo: { ...p.lfo, wave } }))}
-              />
-            </div>
-            <div className="mt-3 flex flex-wrap justify-between gap-2">
-              <Knob
-                label="Rate"
-                value={p.lfo.rate}
-                min={0.05}
-                max={18}
-                format={(v) => `${v.toFixed(2)}`}
-                onChange={(rate) => update(clonePatch(p, { lfo: { ...p.lfo, rate } }))}
-              />
-              <Knob
-                label="Depth"
-                value={p.lfo.depth}
-                format={fmtPct}
-                onChange={(depth) => update(clonePatch(p, { lfo: { ...p.lfo, depth } }))}
-              />
+          <LfoCell title="LFO 1" lfo={p.lfo} onChange={(lfo) => update(clonePatch(p, { lfo }))} />
+          <LfoCell title="LFO 2" lfo={p.lfo2} onChange={(lfo2) => update(clonePatch(p, { lfo2 }))} />
+
+          <Cell title="FX">
+            <div className="lyra-knobs lyra-knobs-3">
               <Knob
                 label="Delay"
                 value={p.fx.delayMix}
@@ -530,46 +468,45 @@ export function SynthApp() {
                 onChange={(chorusMix) => update(clonePatch(p, { fx: { ...p.fx, chorusMix } }))}
               />
               <Knob
-                label="Level"
-                value={p.master}
+                label="Phsr"
+                value={p.fx.phaserMix}
                 format={fmtPct}
-                onChange={(master) => update(clonePatch(p, { master }))}
+                onChange={(phaserMix) => update(clonePatch(p, { fx: { ...p.fx, phaserMix } }))}
               />
             </div>
-          </Panel>
-        </div>
+          </Cell>
 
-        <div className="grid gap-3 lg:grid-cols-[1.1fr_0.9fr]">
-          <Panel title="Arpeggiator">
-            <div className="flex flex-wrap items-center gap-2">
+          <Cell title="Arpeggiator">
+            <div className="flex gap-1">
               <button
                 type="button"
                 onClick={() => update(clonePatch(p, { arp: { ...p.arp, on: !p.arp.on } }))}
                 className={cn(
-                  "h-11 rounded-lg px-4 text-sm font-semibold",
+                  "h-10 shrink-0 rounded-md px-3 text-sm font-semibold",
                   p.arp.on ? "bg-accent text-accent-fg" : "bg-elevated text-muted",
                 )}
               >
-                {p.arp.on ? "Arp on" : "Arp off"}
+                {p.arp.on ? "On" : "Off"}
               </button>
-              <ModeRow
-                label="Mode"
-                value={p.arp.mode}
-                options={
-                  [
-                    { id: "up", label: "Up" },
-                    { id: "down", label: "Down" },
-                    { id: "updown", label: "Up/Dn" },
-                    { id: "random", label: "Rand" },
-                    { id: "asplayed", label: "Held" },
-                  ] as { id: ArpMode; label: string }[]
-                }
-                onChange={(mode) => update(clonePatch(p, { arp: { ...p.arp, mode } }))}
-              />
+              <div className="min-w-0 flex-1">
+                <Seg
+                  value={p.arp.mode}
+                  options={
+                    [
+                      { id: "up", label: "Up" },
+                      { id: "down", label: "Dn" },
+                      { id: "updown", label: "U/D" },
+                      { id: "random", label: "Rnd" },
+                      { id: "asplayed", label: "Hld" },
+                    ] as { id: ArpMode; label: string }[]
+                  }
+                  onChange={(mode) => update(clonePatch(p, { arp: { ...p.arp, mode } }))}
+                />
+              </div>
             </div>
-            <div className="mt-3 flex flex-wrap justify-between gap-2">
+            <div className="lyra-knobs mt-2">
               <Knob
-                label="Tempo"
+                label="BPM"
                 value={p.arp.tempo}
                 min={60}
                 max={180}
@@ -577,12 +514,7 @@ export function SynthApp() {
                 format={(v) => `${Math.round(v)}`}
                 onChange={(tempo) => update(clonePatch(p, { arp: { ...p.arp, tempo } }))}
               />
-              <Knob
-                label="Gate"
-                value={p.arp.gate}
-                format={fmtPct}
-                onChange={(gate) => update(clonePatch(p, { arp: { ...p.arp, gate } }))}
-              />
+              <Knob label="Gate" value={p.arp.gate} format={fmtPct} onChange={(gate) => update(clonePatch(p, { arp: { ...p.arp, gate } }))} />
               <Knob
                 label="Swing"
                 value={p.arp.swing}
@@ -601,9 +533,8 @@ export function SynthApp() {
                 }
               />
             </div>
-            <div className="mt-3">
-              <ModeRow
-                label="Rate"
+            <div className="mt-2">
+              <Seg
                 value={p.arp.rate}
                 options={
                   [
@@ -617,20 +548,51 @@ export function SynthApp() {
                 onChange={(rate) => update(clonePatch(p, { arp: { ...p.arp, rate } }))}
               />
             </div>
-          </Panel>
-          <Panel title="Scope">
-            {engine ? <Scope /> : <div className="h-24 rounded-lg bg-ink-soft sm:h-28" />}
-            <p className="mt-2 text-xs text-subtle">Live output after the effects rack.</p>
-          </Panel>
+          </Cell>
+
+          <Cell title="Matrix" className="lyra-span-2">
+            <div className="flex min-h-0 flex-1 flex-col justify-evenly gap-2">
+              {p.matrix.map((row, i) => (
+                <div key={i} className="lyra-matrix-row">
+                  <select
+                    aria-label={`Matrix ${i + 1} source`}
+                    className="h-10 min-w-0 rounded-md bg-elevated px-1.5 text-sm text-fg"
+                    value={row.src}
+                    onChange={(e) => setMatrix(i, { ...row, src: e.target.value as ModSource })}
+                  >
+                    {MOD_SRC.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.label}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    aria-label={`Matrix ${i + 1} destination`}
+                    className="h-10 min-w-0 rounded-md bg-elevated px-1.5 text-sm text-fg"
+                    value={row.dest}
+                    onChange={(e) => setMatrix(i, { ...row, dest: e.target.value as ModDest })}
+                  >
+                    {LFO_DEST.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.label}
+                      </option>
+                    ))}
+                  </select>
+                  <AmtFader label="Amt" value={row.amount} onChange={(amount) => setMatrix(i, { ...row, amount })} />
+                </div>
+              ))}
+            </div>
+          </Cell>
         </div>
 
-        <Panel title={`Library · ${factory.length} factory`}>
+        <section className="lyra-lib mt-3 rounded-xl bg-surface p-4">
+          <h2 className="lyra-cell-title">Library · {factory.length} factory</h2>
           <div className="flex flex-wrap gap-1">
             <button
               type="button"
               onClick={() => setLibCat("All")}
               className={cn(
-                "h-8 rounded-md px-2.5 text-[0.6875rem] font-medium",
+                "h-12 rounded-md px-3.5 text-lg font-medium",
                 libCat === "All" ? "bg-accent text-accent-fg" : "bg-elevated text-muted hover:text-fg",
               )}
             >
@@ -642,7 +604,7 @@ export function SynthApp() {
                 type="button"
                 onClick={() => setLibCat(g.category)}
                 className={cn(
-                  "h-8 rounded-md px-2.5 text-[0.6875rem] font-medium",
+                  "h-12 rounded-md px-3.5 text-lg font-medium",
                   libCat === g.category ? "bg-accent text-accent-fg" : "bg-elevated text-muted hover:text-fg",
                 )}
               >
@@ -657,14 +619,14 @@ export function SynthApp() {
             placeholder="Search patches"
             className="mt-3 h-11 w-full rounded-lg bg-elevated px-3 text-sm text-fg placeholder:text-subtle"
           />
-          <div className="mt-3 grid max-h-56 grid-cols-2 gap-1 overflow-y-auto sm:grid-cols-3 md:grid-cols-4">
+          <div className="mt-3 grid grid-cols-2 gap-1 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
             {filteredFactory.map((x) => (
               <button
                 key={x.id}
                 type="button"
                 onClick={() => loadPatch(x)}
                 className={cn(
-                  "truncate rounded-md px-2 py-2 text-left text-[0.75rem]",
+                  "truncate rounded-md px-3 py-2.5 text-left text-lg",
                   x.id === p.id ? "bg-accent text-accent-fg" : "bg-elevated text-fg hover:text-accent",
                 )}
                 title={`${x.category} — ${x.name}`}
@@ -696,7 +658,7 @@ export function SynthApp() {
             <ul className="mt-3 divide-y divide-border">
               {userPatches.map((u) => (
                 <li key={u.id} className="flex items-center gap-2 py-2">
-                  <button type="button" className="flex-1 text-left text-sm hover:text-accent" onClick={() => loadPatch(u)}>
+                  <button type="button" className="flex-1 text-left text-lg hover:text-accent" onClick={() => loadPatch(u)}>
                     {u.name}
                   </button>
                   <button
@@ -711,52 +673,63 @@ export function SynthApp() {
               ))}
             </ul>
           )}
-        </Panel>
+        </section>
       </main>
 
-      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-bg/95 p-3 backdrop-blur-sm sm:p-4">
-        <div className="mx-auto max-w-6xl">
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-            <h2 className="flex items-center gap-2 font-display text-xs font-semibold uppercase tracking-[0.16em] text-muted">
-              <KeyboardIcon className="size-3.5" />
-              Keyboard
-            </h2>
-            <div className="flex items-center gap-2">
-              <button type="button" className="h-10 rounded-md bg-elevated px-3 text-sm" onClick={() => shiftOctave(-1)}>
-                Oct −
-              </button>
-              <span className="font-mono text-xs tabular-nums text-muted">C{3 + octave}</span>
-              <button type="button" className="h-10 rounded-md bg-elevated px-3 text-sm" onClick={() => shiftOctave(1)}>
-                Oct +
-              </button>
-              <button
-                type="button"
-                className="h-10 rounded-md bg-accent px-3 text-sm font-semibold text-accent-fg"
-                onClick={() => {
-                  const phrase = [48, 52, 55, 60, 55, 52, 48];
-                  noteOn(phrase[0]!, 0.85);
-                  window.setTimeout(() => noteOff(phrase[0]!), 220);
-                  phrase.slice(1).forEach((n, i) => {
-                    window.setTimeout(() => {
-                      noteOn(n, 0.8);
-                      window.setTimeout(() => noteOff(n), 220);
-                    }, (i + 1) * 260);
-                  });
-                }}
-              >
-                Phrase
-              </button>
-            </div>
+      {showKeys && (
+        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-bg/95 px-3 py-2">
+          <div className="flex items-center gap-3">
+            <Keyboard />
+            <button
+              type="button"
+              className="h-8 shrink-0 rounded-md bg-elevated px-2 text-2xs text-muted hover:text-fg"
+              onClick={toggleKeys}
+            >
+              Hide
+            </button>
           </div>
-          <Keyboard />
-          <p className="mt-2 text-xs text-subtle">
-            {armed
-              ? "A–L whites, W/E/T/Y/U/O/P blacks. Z / X octave. Esc panic."
-              : "Press a piano key or A–L — sound starts on that press."}
-          </p>
         </div>
-      </div>
+      )}
     </div>
+  );
+}
+
+function EnvKnobs({
+  env,
+  onChange,
+}: {
+  env: Patch["ampEnv"];
+  onChange: (e: Patch["ampEnv"]) => void;
+}) {
+  return (
+    <div className="lyra-knobs">
+      <Knob label="A" value={env.attack} min={0.001} max={4} format={fmtMs} onChange={(attack) => onChange({ ...env, attack })} />
+      <Knob label="D" value={env.decay} min={0.01} max={4} format={fmtMs} onChange={(decay) => onChange({ ...env, decay })} />
+      <Knob label="S" value={env.sustain} format={fmtPct} onChange={(sustain) => onChange({ ...env, sustain })} />
+      <Knob label="R" value={env.release} min={0.01} max={8} format={fmtMs} onChange={(release) => onChange({ ...env, release })} />
+    </div>
+  );
+}
+
+function LfoCell({ title, lfo, onChange }: { title: string; lfo: LfoParams; onChange: (l: LfoParams) => void }) {
+  return (
+    <Cell title={title}>
+      <div className="flex shrink-0 flex-col gap-1">
+        <Seg compact value={lfo.dest} options={LFO_DEST} onChange={(dest) => onChange({ ...lfo, dest })} />
+        <Seg compact value={lfo.wave} options={LFO_WAVE} onChange={(wave) => onChange({ ...lfo, wave })} />
+      </div>
+      <div className="lyra-knobs lyra-knobs-2 mt-3">
+        <Knob
+          label="Rate"
+          value={lfo.rate}
+          min={0.05}
+          max={18}
+          format={(v) => v.toFixed(1)}
+          onChange={(rate) => onChange({ ...lfo, rate })}
+        />
+        <Knob label="Depth" value={lfo.depth} format={fmtPct} onChange={(depth) => onChange({ ...lfo, depth })} />
+      </div>
+    </Cell>
   );
 }
 
@@ -765,22 +738,22 @@ function MidiBadge({ status, name }: { status: string; name: string | null }) {
     status === "ok"
       ? name ?? "MIDI"
       : status === "unsupported"
-        ? "No Web MIDI"
+        ? "No MIDI"
         : status === "denied"
-          ? "MIDI blocked"
+          ? "Blocked"
           : status === "none"
-            ? "No keyboard"
-            : "MIDI idle";
+            ? "No kb"
+            : "MIDI";
   return (
     <div
       className={cn(
-        "flex h-11 max-w-44 items-center gap-2 truncate rounded-lg px-3 text-xs",
-        status === "ok" ? "bg-elevated text-accent" : "bg-elevated text-muted",
+        "hidden h-10 w-40 items-center gap-1.5 truncate rounded-md px-2 text-sm sm:flex",
+        status === "ok" ? "text-accent" : "text-muted",
       )}
       title={label}
     >
-      <Usb className="size-3.5 shrink-0" />
-      <span className="truncate">{label}</span>
+      <Usb className="size-4 shrink-0" />
+      <span className="truncate font-medium">{label}</span>
       <span className={cn("size-1.5 shrink-0 rounded-full", status === "ok" ? "bg-accent" : "bg-subtle")} />
     </div>
   );

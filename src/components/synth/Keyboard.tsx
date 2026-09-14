@@ -30,7 +30,7 @@ export function Keyboard() {
   const release = (midi: number) => () => noteOff(midi);
 
   return (
-    <div className="relative h-28 w-full overflow-hidden rounded-xl bg-elevated sm:h-32">
+    <div className="relative h-16 w-full overflow-hidden rounded-lg bg-elevated">
       <div className="absolute inset-0 flex">
         {whites.map((midi) => {
           const on = active.includes(midi);

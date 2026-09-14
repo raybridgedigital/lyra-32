@@ -1,4 +1,4 @@
-import type { OscParams, Patch } from "./types";
+import type { LfoParams, ModRoute, OscParams, Patch } from "./types";
 
 export const osc = (over: Partial<OscParams> = {}): OscParams => ({
   wave: "sawtooth",
@@ -10,11 +10,54 @@ export const osc = (over: Partial<OscParams> = {}): OscParams => ({
   ...over,
 });
 
-export function patch(
-  partial: Omit<Patch, "osc1" | "osc2"> & { osc1?: Partial<OscParams>; osc2?: Partial<OscParams> },
-): Patch {
+export const defaultLfo2 = (): LfoParams => ({
+  rate: 0.35,
+  depth: 0,
+  dest: "pan",
+  wave: "triangle",
+});
+
+export const emptyMatrix = (): ModRoute[] => [
+  { src: "lfo1", dest: "cutoff", amount: 0 },
+  { src: "lfo2", dest: "pitch", amount: 0 },
+  { src: "fenv", dest: "cutoff", amount: 0 },
+  { src: "vel", dest: "amp", amount: 0 },
+];
+
+type PatchIn = Omit<Partial<Patch>, "osc1" | "osc2" | "fx" | "lfo2" | "matrix"> & {
+  id: string;
+  name: string;
+  category: string;
+  osc1?: Partial<OscParams>;
+  osc2?: Partial<OscParams>;
+  fx?: Partial<Patch["fx"]>;
+  lfo2?: Partial<LfoParams>;
+  matrix?: ModRoute[];
+};
+
+export function patch(partial: PatchIn): Patch {
   const { osc1: o1, osc2: o2, ...rest } = partial;
-  return {
+  return normalizePatch({
+    subLevel: 0.1,
+    noiseLevel: 0,
+    fmIndex: 0,
+    ring: 0,
+    sync: 0,
+    drift: 0,
+    velFilt: 0,
+    drive: 0.1,
+    filter: { type: "lowpass", slope: 24, cutoff: 0.55, resonance: 0.18, envAmount: 0.25, keyTrack: 0.3 },
+    ampEnv: { attack: 0.01, decay: 0.25, sustain: 0.65, release: 0.25 },
+    filterEnv: { attack: 0.01, decay: 0.22, sustain: 0.3, release: 0.2 },
+    lfo: { rate: 0.35, depth: 0.08, dest: "cutoff", wave: "sine" },
+    lfo2: defaultLfo2(),
+    matrix: emptyMatrix(),
+    fx: { delayMix: 0.12, delayTime: 0.28, delayFeedback: 0.28, reverbMix: 0.18, chorusMix: 0.08, phaserMix: 0 },
+    unison: { voices: 1, detune: 0.1, spread: 0.3 },
+    glide: 0,
+    polyMode: "poly",
+    master: 0.7,
+    arp: { on: false, mode: "up", rate: "1/16", octaves: 1, gate: 0.5, swing: 0, tempo: 120 },
     ...rest,
     osc1: osc(o1),
     osc2: osc({
@@ -26,11 +69,43 @@ export function patch(
       pwm: 0.5,
       ...o2,
     }),
-  } as Patch;
+  } as Patch);
+}
+
+export function normalizePatch(p: Patch): Patch {
+  const matrixIn = Array.isArray(p.matrix) ? p.matrix : [];
+  const matrix = emptyMatrix().map((slot, i) => {
+    const r = matrixIn[i];
+    if (!r) return slot;
+    return {
+      src: r.src ?? slot.src,
+      dest: r.dest ?? slot.dest,
+      amount: Number.isFinite(r.amount) ? r.amount : 0,
+    };
+  });
+  return {
+    ...p,
+    ring: p.ring ?? 0,
+    sync: p.sync ?? 0,
+    drift: p.drift ?? 0,
+    velFilt: p.velFilt ?? 0,
+    lfo2: { ...defaultLfo2(), ...p.lfo2 },
+    matrix,
+    fx: {
+      delayMix: p.fx?.delayMix ?? 0.12,
+      delayTime: p.fx?.delayTime ?? 0.28,
+      delayFeedback: p.fx?.delayFeedback ?? 0.28,
+      reverbMix: p.fx?.reverbMix ?? 0.18,
+      chorusMix: p.fx?.chorusMix ?? 0.08,
+      phaserMix: p.fx?.phaserMix ?? 0,
+    },
+    osc1: osc(p.osc1),
+    osc2: osc(p.osc2 ?? { level: 0 }),
+  };
 }
 
 export function clonePatch(p: Patch, over: Partial<Patch> = {}): Patch {
-  return {
+  return normalizePatch({
     ...p,
     ...over,
     osc1: { ...p.osc1, ...(over.osc1 ?? {}) },
@@ -39,10 +114,16 @@ export function clonePatch(p: Patch, over: Partial<Patch> = {}): Patch {
     ampEnv: { ...p.ampEnv, ...(over.ampEnv ?? {}) },
     filterEnv: { ...p.filterEnv, ...(over.filterEnv ?? {}) },
     lfo: { ...p.lfo, ...(over.lfo ?? {}) },
-    fx: { ...p.fx, ...(over.fx ?? {}) },
+    lfo2: { ...defaultLfo2(), ...p.lfo2, ...(over.lfo2 ?? {}) },
+    fx: { ...p.fx, phaserMix: p.fx?.phaserMix ?? 0, ...(over.fx ?? {}) },
     unison: { ...p.unison, ...(over.unison ?? {}) },
     arp: { ...p.arp, ...(over.arp ?? {}) },
-  };
+    matrix: over.matrix ?? p.matrix,
+    ring: over.ring ?? p.ring,
+    sync: over.sync ?? p.sync,
+    drift: over.drift ?? p.drift,
+    velFilt: over.velFilt ?? p.velFilt,
+  } as Patch);
 }
 
 type Draft = Omit<Patch, "id" | "name" | "category" | "osc1" | "osc2"> & {
@@ -70,8 +151,18 @@ export const CATEGORY_ORDER = [
   "Pluck",
   "Bell",
   "Sequence",
+  "Techno",
   "FX",
 ] as const;
+
+const v2 = {
+  ring: 0,
+  sync: 0,
+  drift: 0,
+  velFilt: 0,
+  lfo2: defaultLfo2(),
+  matrix: emptyMatrix(),
+};
 
 const DEFAULTS: Record<string, Draft> = {
   Bass: {
@@ -81,11 +172,12 @@ const DEFAULTS: Record<string, Draft> = {
     noiseLevel: 0,
     fmIndex: 0,
     drive: 0.22,
+    ...v2,
     filter: { type: "lowpass", slope: 24, cutoff: 0.34, resonance: 0.32, envAmount: 0.42, keyTrack: 0.15 },
     ampEnv: { attack: 0.006, decay: 0.26, sustain: 0.7, release: 0.16 },
     filterEnv: { attack: 0.004, decay: 0.2, sustain: 0.18, release: 0.12 },
     lfo: { rate: 0.12, depth: 0.08, dest: "cutoff", wave: "sine" },
-    fx: { delayMix: 0.05, delayTime: 0.28, delayFeedback: 0.2, reverbMix: 0.06, chorusMix: 0 },
+    fx: { delayMix: 0.05, delayTime: 0.28, delayFeedback: 0.2, reverbMix: 0.06, chorusMix: 0, phaserMix: 0 },
     unison: { voices: 1, detune: 0.06, spread: 0.15 },
     glide: 0.05,
     polyMode: "mono",
@@ -99,11 +191,12 @@ const DEFAULTS: Record<string, Draft> = {
     noiseLevel: 0,
     fmIndex: 0,
     drive: 0.18,
+    ...v2,
     filter: { type: "lowpass", slope: 12, cutoff: 0.62, resonance: 0.24, envAmount: 0.32, keyTrack: 0.28 },
     ampEnv: { attack: 0.02, decay: 0.22, sustain: 0.72, release: 0.28 },
     filterEnv: { attack: 0.02, decay: 0.24, sustain: 0.45, release: 0.2 },
     lfo: { rate: 4.8, depth: 0.1, dest: "pitch", wave: "sine" },
-    fx: { delayMix: 0.22, delayTime: 0.3, delayFeedback: 0.32, reverbMix: 0.16, chorusMix: 0.18 },
+    fx: { delayMix: 0.22, delayTime: 0.3, delayFeedback: 0.32, reverbMix: 0.16, chorusMix: 0.18, phaserMix: 0 },
     unison: { voices: 1, detune: 0.1, spread: 0.35 },
     glide: 0.06,
     polyMode: "mono",
@@ -117,11 +210,12 @@ const DEFAULTS: Record<string, Draft> = {
     noiseLevel: 0,
     fmIndex: 0,
     drive: 0.08,
+    ...v2,
     filter: { type: "lowpass", slope: 12, cutoff: 0.58, resonance: 0.16, envAmount: 0.32, keyTrack: 0.38 },
     ampEnv: { attack: 0.008, decay: 0.32, sustain: 0.55, release: 0.35 },
     filterEnv: { attack: 0.006, decay: 0.36, sustain: 0.38, release: 0.3 },
     lfo: { rate: 0.45, depth: 0.08, dest: "pitch", wave: "sine" },
-    fx: { delayMix: 0.1, delayTime: 0.32, delayFeedback: 0.22, reverbMix: 0.22, chorusMix: 0.24 },
+    fx: { delayMix: 0.1, delayTime: 0.32, delayFeedback: 0.22, reverbMix: 0.22, chorusMix: 0.24, phaserMix: 0 },
     unison: { voices: 1, detune: 0.08, spread: 0.3 },
     glide: 0,
     polyMode: "poly",
@@ -135,11 +229,12 @@ const DEFAULTS: Record<string, Draft> = {
     noiseLevel: 0.02,
     fmIndex: 0,
     drive: 0.2,
+    ...v2,
     filter: { type: "lowpass", slope: 12, cutoff: 0.52, resonance: 0.22, envAmount: 0.48, keyTrack: 0.18 },
     ampEnv: { attack: 0.05, decay: 0.2, sustain: 0.7, release: 0.22 },
     filterEnv: { attack: 0.04, decay: 0.18, sustain: 0.4, release: 0.16 },
     lfo: { rate: 0.25, depth: 0.06, dest: "cutoff", wave: "sine" },
-    fx: { delayMix: 0.08, delayTime: 0.28, delayFeedback: 0.2, reverbMix: 0.14, chorusMix: 0.16 },
+    fx: { delayMix: 0.08, delayTime: 0.28, delayFeedback: 0.2, reverbMix: 0.14, chorusMix: 0.16, phaserMix: 0.08 },
     unison: { voices: 2, detune: 0.1, spread: 0.45 },
     glide: 0.03,
     polyMode: "poly",
@@ -153,11 +248,12 @@ const DEFAULTS: Record<string, Draft> = {
     noiseLevel: 0.03,
     fmIndex: 0,
     drive: 0.08,
+    ...v2,
     filter: { type: "lowpass", slope: 24, cutoff: 0.48, resonance: 0.1, envAmount: 0.2, keyTrack: 0.25 },
     ampEnv: { attack: 0.55, decay: 0.8, sustain: 0.72, release: 1.8 },
     filterEnv: { attack: 0.7, decay: 1.0, sustain: 0.55, release: 2.0 },
     lfo: { rate: 0.1, depth: 0.16, dest: "cutoff", wave: "sine" },
-    fx: { delayMix: 0.16, delayTime: 0.42, delayFeedback: 0.26, reverbMix: 0.4, chorusMix: 0.32 },
+    fx: { delayMix: 0.16, delayTime: 0.42, delayFeedback: 0.26, reverbMix: 0.4, chorusMix: 0.32, phaserMix: 0.12 },
     unison: { voices: 2, detune: 0.18, spread: 0.7 },
     glide: 0,
     polyMode: "poly",
@@ -171,11 +267,12 @@ const DEFAULTS: Record<string, Draft> = {
     noiseLevel: 0.05,
     fmIndex: 0,
     drive: 0.14,
+    ...v2,
     filter: { type: "lowpass", slope: 24, cutoff: 0.55, resonance: 0.55, envAmount: 0.68, keyTrack: 0.42 },
     ampEnv: { attack: 0.004, decay: 0.22, sustain: 0.08, release: 0.18 },
     filterEnv: { attack: 0.002, decay: 0.18, sustain: 0.06, release: 0.14 },
     lfo: { rate: 0.4, depth: 0.05, dest: "cutoff", wave: "sine" },
-    fx: { delayMix: 0.22, delayTime: 0.3, delayFeedback: 0.32, reverbMix: 0.2, chorusMix: 0.1 },
+    fx: { delayMix: 0.22, delayTime: 0.3, delayFeedback: 0.32, reverbMix: 0.2, chorusMix: 0.1, phaserMix: 0 },
     unison: { voices: 1, detune: 0.08, spread: 0.3 },
     glide: 0,
     polyMode: "poly",
@@ -189,11 +286,12 @@ const DEFAULTS: Record<string, Draft> = {
     noiseLevel: 0.03,
     fmIndex: 0.48,
     drive: 0.04,
+    ...v2,
     filter: { type: "lowpass", slope: 12, cutoff: 0.76, resonance: 0.1, envAmount: 0.16, keyTrack: 0.2 },
     ampEnv: { attack: 0.004, decay: 1.3, sustain: 0.12, release: 1.0 },
     filterEnv: { attack: 0.01, decay: 0.55, sustain: 0.2, release: 0.7 },
     lfo: { rate: 0.2, depth: 0.06, dest: "pitch", wave: "sine" },
-    fx: { delayMix: 0.2, delayTime: 0.38, delayFeedback: 0.22, reverbMix: 0.44, chorusMix: 0.08 },
+    fx: { delayMix: 0.2, delayTime: 0.38, delayFeedback: 0.22, reverbMix: 0.44, chorusMix: 0.08, phaserMix: 0 },
     unison: { voices: 1, detune: 0.04, spread: 0.25 },
     glide: 0,
     polyMode: "poly",
@@ -207,16 +305,37 @@ const DEFAULTS: Record<string, Draft> = {
     noiseLevel: 0,
     fmIndex: 0,
     drive: 0.14,
+    ...v2,
     filter: { type: "lowpass", slope: 24, cutoff: 0.5, resonance: 0.36, envAmount: 0.52, keyTrack: 0.25 },
     ampEnv: { attack: 0.004, decay: 0.12, sustain: 0.32, release: 0.08 },
     filterEnv: { attack: 0.002, decay: 0.1, sustain: 0.14, release: 0.08 },
     lfo: { rate: 0.35, depth: 0.12, dest: "cutoff", wave: "triangle" },
-    fx: { delayMix: 0.3, delayTime: 0.25, delayFeedback: 0.38, reverbMix: 0.16, chorusMix: 0.1 },
+    fx: { delayMix: 0.3, delayTime: 0.25, delayFeedback: 0.38, reverbMix: 0.16, chorusMix: 0.1, phaserMix: 0 },
     unison: { voices: 1, detune: 0.08, spread: 0.28 },
     glide: 0,
     polyMode: "poly",
     master: 0.68,
     arp: { on: true, mode: "up", rate: "1/16", octaves: 2, gate: 0.5, swing: 0.08, tempo: 124 },
+  },
+  Techno: {
+    osc1: { wave: "sawtooth", octave: -1, level: 0.92 },
+    osc2: { wave: "square", octave: -1, pwm: 0.3, level: 0.28 },
+    subLevel: 0.42,
+    noiseLevel: 0,
+    fmIndex: 0,
+    drive: 0.3,
+    ...v2,
+    filter: { type: "lowpass", slope: 24, cutoff: 0.34, resonance: 0.58, envAmount: 0.6, keyTrack: 0.1 },
+    ampEnv: { attack: 0.003, decay: 0.16, sustain: 0.48, release: 0.08 },
+    filterEnv: { attack: 0.002, decay: 0.14, sustain: 0.1, release: 0.08 },
+    lfo: { rate: 0.2, depth: 0.1, dest: "cutoff", wave: "triangle" },
+    lfo2: { rate: 0.08, depth: 0.12, dest: "cutoff", wave: "sine" },
+    fx: { delayMix: 0.14, delayTime: 0.23, delayFeedback: 0.3, reverbMix: 0.08, chorusMix: 0, phaserMix: 0.06 },
+    unison: { voices: 1, detune: 0.08, spread: 0.18 },
+    glide: 0.05,
+    polyMode: "mono",
+    master: 0.7,
+    arp: { on: false, mode: "up", rate: "1/16", octaves: 1, gate: 0.42, swing: 0.08, tempo: 132 },
   },
   FX: {
     osc1: { wave: "sine", level: 0.2 },
@@ -225,11 +344,12 @@ const DEFAULTS: Record<string, Draft> = {
     noiseLevel: 0.7,
     fmIndex: 0,
     drive: 0.1,
+    ...v2,
     filter: { type: "bandpass", slope: 12, cutoff: 0.42, resonance: 0.5, envAmount: 0.55, keyTrack: 0 },
     ampEnv: { attack: 0.12, decay: 0.7, sustain: 0.5, release: 0.9 },
     filterEnv: { attack: 0.35, decay: 1.0, sustain: 0.3, release: 1.0 },
     lfo: { rate: 0.15, depth: 0.4, dest: "cutoff", wave: "sawtooth" },
-    fx: { delayMix: 0.28, delayTime: 0.4, delayFeedback: 0.42, reverbMix: 0.38, chorusMix: 0.06 },
+    fx: { delayMix: 0.28, delayTime: 0.4, delayFeedback: 0.42, reverbMix: 0.38, chorusMix: 0.06, phaserMix: 0.2 },
     unison: { voices: 1, detune: 0, spread: 0.2 },
     glide: 0,
     polyMode: "poly",
@@ -243,11 +363,12 @@ const DEFAULTS: Record<string, Draft> = {
     noiseLevel: 0,
     fmIndex: 0,
     drive: 0.12,
+    ...v2,
     filter: { type: "lowpass", slope: 24, cutoff: 0.62, resonance: 0.18, envAmount: 0.28, keyTrack: 0.35 },
     ampEnv: { attack: 0.008, decay: 0.32, sustain: 0.55, release: 0.35 },
     filterEnv: { attack: 0.01, decay: 0.28, sustain: 0.35, release: 0.3 },
     lfo: { rate: 0.35, depth: 0.08, dest: "cutoff", wave: "sine" },
-    fx: { delayMix: 0.12, delayTime: 0.28, delayFeedback: 0.28, reverbMix: 0.18, chorusMix: 0.16 },
+    fx: { delayMix: 0.12, delayTime: 0.28, delayFeedback: 0.28, reverbMix: 0.18, chorusMix: 0.16, phaserMix: 0 },
     unison: { voices: 1, detune: 0.12, spread: 0.4 },
     glide: 0,
     polyMode: "poly",
@@ -271,16 +392,22 @@ export function P(category: string, id: string, name: string, over: Over = {}): 
     subLevel: over.subLevel ?? d.subLevel,
     noiseLevel: over.noiseLevel ?? d.noiseLevel,
     fmIndex: over.fmIndex ?? d.fmIndex,
+    ring: over.ring ?? d.ring,
+    sync: over.sync ?? d.sync,
+    drift: over.drift ?? d.drift,
+    velFilt: over.velFilt ?? d.velFilt,
     drive: over.drive ?? d.drive,
     glide: over.glide ?? d.glide,
     polyMode: over.polyMode ?? d.polyMode,
     master: over.master ?? d.master,
-    osc1: { ...d.osc1, ...over.osc1 },
-    osc2: { ...d.osc2, ...over.osc2 },
+    osc1: osc({ ...d.osc1, ...over.osc1 }),
+    osc2: osc({ ...d.osc2, ...over.osc2 }),
     filter: { ...d.filter, ...over.filter },
     ampEnv: { ...d.ampEnv, ...over.ampEnv },
     filterEnv: { ...d.filterEnv, ...over.filterEnv },
     lfo: { ...d.lfo, ...over.lfo },
+    lfo2: { ...d.lfo2, ...over.lfo2 },
+    matrix: (over.matrix as ModRoute[] | undefined) ?? d.matrix,
     fx: { ...d.fx, ...over.fx },
     unison: { ...d.unison, ...over.unison },
     arp: { ...d.arp, ...over.arp },

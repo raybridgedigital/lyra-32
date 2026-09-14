@@ -3,21 +3,24 @@
 @theme {
   --font-display: "Syne", ui-sans-serif, system-ui, sans-serif;
   --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "IBM Plex Sans", ui-monospace, monospace;
+  --font-mono: "IBM Plex Sans", ui-monospace, ui-sans-serif, monospace;
 
-  --color-bg: #0e1116;
-  --color-surface: #161b22;
-  --color-elevated: #1e252f;
-  --color-ink: #0e1116;
-  --color-ink-soft: #141820;
+  --color-bg: #0c0f14;
+  --color-surface: #141a22;
+  --color-elevated: #1c242e;
+  --color-ink: #0c0f14;
+  --color-ink-soft: #10151c;
   --color-fg: #e8e2d6;
   --color-muted: #8b93a0;
   --color-subtle: #5c6573;
   --color-accent: #c9893a;
-  --color-accent-fg: #0e1116;
+  --color-accent-fg: #0c0f14;
   --color-border: rgb(232 226 214 / 12%);
   --color-key: #dcd4c6;
   --color-key-hover: #efe8da;
+
+  --text-2xs: 0.625rem;
+  --text-2xs--line-height: 1.1;
 
   --radius-md: 8px;
   --radius-lg: 12px;
@@ -25,8 +28,8 @@
   --radius-2xl: 20px;
   --radius-3xl: 28px;
 
-  --shadow-knob: inset 0 1px 0 rgb(255 255 255 / 8%), 0 0 0 1px rgb(232 226 214 / 10%);
-  --shadow-panel: 0 0 0 1px rgb(232 226 214 / 8%);
+  --shadow-knob: inset 0 1px 0 rgb(255 255 255 / 10%), 0 0 0 1px rgb(232 226 214 / 10%);
+  --shadow-panel: 0 0 0 1px rgb(232 226 214 / 10%);
 
   --motion-quick: 150ms;
   --motion-fast: 250ms;
@@ -55,8 +58,9 @@
     text-wrap: balance;
   }
 
-  p {
-    text-wrap: pretty;
+  select {
+    background-color: var(--color-elevated);
+    color: var(--color-fg);
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -66,5 +70,158 @@
       animation-duration: 0.01ms !important;
       transition-duration: 0.01ms !important;
     }
+  }
+}
+
+@layer components {
+  .lyra-face {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1px;
+    overflow: hidden;
+    border-radius: var(--radius-xl);
+    background: var(--color-border);
+    box-shadow: var(--shadow-panel);
+  }
+
+  @media (min-width: 768px) {
+    .lyra-face {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (min-width: 1100px) {
+    .lyra-face {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-rows: minmax(0, 1.2fr) minmax(0, 0.8fr) minmax(0, 1fr);
+      height: calc(100dvh - 3.5rem);
+      min-height: 0;
+    }
+
+    .lyra-face.keys-on {
+      height: calc(100dvh - 8.5rem);
+    }
+  }
+
+  .lyra-brand {
+    display: flex;
+    min-width: 0;
+    align-items: baseline;
+    gap: 0.5rem;
+  }
+
+  .lyra-byline {
+    overflow: hidden;
+    font-family: var(--font-sans);
+    font-size: 0.55em;
+    font-weight: 400;
+    letter-spacing: 0.04em;
+    color: var(--color-fg);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .lyra-patch-select {
+    text-align: center;
+    text-align-last: center;
+  }
+
+  .lyra-patch-select option,
+  .lyra-patch-select optgroup {
+    text-align: center;
+  }
+
+  .lyra-span-2 {
+    grid-column: span 2;
+  }
+
+  .lyra-span-full {
+    grid-column: 1 / -1;
+  }
+
+  .lyra-cell {
+    display: flex;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+    flex-direction: column;
+    background: var(--color-surface);
+    padding: 12px 14px 18px;
+  }
+
+  .lyra-cell-title {
+    margin: 0 0 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--color-border);
+    font-family: var(--font-display);
+    font-size: 0.875rem;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    line-height: 1.2;
+    text-transform: uppercase;
+    color: var(--color-accent);
+  }
+
+  .lyra-knobs {
+    display: grid;
+    flex: 1 1 auto;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    align-content: center;
+    justify-items: center;
+    row-gap: 18px;
+    column-gap: 0;
+    min-height: 0;
+  }
+
+  .lyra-knobs-5 {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .lyra-knobs-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .lyra-matrix-row {
+    display: grid;
+    min-width: 0;
+    grid-template-columns: 5.5rem 5.5rem minmax(0, 1fr);
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .lyra-knob {
+    width: 4.5rem;
+    height: 4.5rem;
+  }
+
+  .lyra-fader {
+    appearance: none;
+    height: 10px;
+    border-radius: 999px;
+    background: var(--color-elevated);
+    box-shadow: inset 0 0 0 1px var(--color-border);
+  }
+
+  .lyra-fader::-webkit-slider-thumb {
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 999px;
+    background: var(--color-accent);
+    box-shadow: 0 0 0 1px rgb(12 15 20 / 40%);
+  }
+
+  .lyra-fader::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border: 0;
+    border-radius: 999px;
+    background: var(--color-accent);
+  }
+
+  .lyra-fader::-moz-range-track {
+    height: 8px;
+    border-radius: 999px;
+    background: var(--color-elevated);
   }
 }

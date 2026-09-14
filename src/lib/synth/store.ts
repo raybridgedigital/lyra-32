@@ -5,6 +5,7 @@ import { LyraEngine, createEngine } from "./engine";
 import { QWERTY_MAP, connectMidi } from "./midi";
 
 const USER_KEY = "lyra32-user-patches";
+const KEYS_KEY = "lyra32-show-keys";
 
 function loadUser(): Patch[] {
   if (typeof window === "undefined") return [];
@@ -39,6 +40,7 @@ type State = {
   activeNotes: number[];
   arpStep: number;
   masterMute: boolean;
+  showKeys: boolean;
   engine: LyraEngine | null;
   arm: () => void;
   loadPatch: (p: Patch) => void;
@@ -50,6 +52,7 @@ type State = {
   shiftOctave: (d: number) => void;
   panic: () => void;
   toggleMute: () => void;
+  toggleKeys: () => void;
   hydrate: () => void;
 };
 
@@ -130,6 +133,7 @@ export const useSynth = create<State>((set, get) => ({
   activeNotes: [],
   arpStep: 0,
   masterMute: false,
+  showKeys: typeof window === "undefined" ? true : localStorage.getItem(KEYS_KEY) !== "0",
   engine: null,
 
   arm: () => {
@@ -193,7 +197,25 @@ export const useSynth = create<State>((set, get) => ({
     get().engine?.setMaster(next ? 0 : get().patch.master);
   },
 
-  hydrate: () => set({ userPatches: loadUser() }),
+  toggleKeys: () => {
+    const next = !get().showKeys;
+    try {
+      localStorage.setItem(KEYS_KEY, next ? "1" : "0");
+    } catch {
+      /* */
+    }
+    set({ showKeys: next });
+  },
+
+  hydrate: () => {
+    let showKeys = true;
+    try {
+      showKeys = localStorage.getItem(KEYS_KEY) !== "0";
+    } catch {
+      /* */
+    }
+    set({ userPatches: loadUser(), showKeys });
+  },
 }));
 
 function clampInt(n: number, a: number, b: number) {
