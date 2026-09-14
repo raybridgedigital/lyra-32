@@ -3,7 +3,7 @@ import { AuthProvider } from "@/lib/auth/provider";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import appCss from "../styles.css?url";
 
-const APP_NAME = "LYRA-32 Mk IV.1";
+const APP_NAME = "LYRA-32 Mk IV.2";
 
 export const Route = createRootRoute({
   head: () => ({
@@ -15,7 +15,7 @@ export const Route = createRootRoute({
       {
         name: "description",
         content:
-          "LYRA-32 Mk IV.1 hybrid flagship synthesizer. Dual LFO, mod matrix, DAW clock, ring/sync, phaser. USB-C MIDI, computer keys, or on-screen piano.",
+          "LYRA-32 Mk IV hybrid flagship synthesizer. Dual LFO, mod matrix, DAW clock, ring/sync, phaser. USB-C MIDI, computer keys, or on-screen piano.",
       },
     ],
     links: [
@@ -27,7 +27,7 @@ export const Route = createRootRoute({
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {
         rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Syne:wght@500;600;700&display=swap",
+        href: "https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500;1,600&family=IBM+Plex+Sans:wght@400;500;600&family=Syne:wght@500;600;700&display=swap",
       },
     ],
   }),

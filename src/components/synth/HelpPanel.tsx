@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { CircleHelp, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useSynth } from "@/lib/synth/store";
+import { LayerBrand } from "./LayerStrip";
 
 const TABS = [
   { id: "start", label: "Start" },
@@ -10,6 +11,7 @@ const TABS = [
   { id: "arp", label: "Arp" },
   { id: "studio", label: "Studio" },
   { id: "faq", label: "FAQ" },
+  { id: "about", label: "About" },
 ] as const;
 
 type Tab = (typeof TABS)[number]["id"];
@@ -104,6 +106,7 @@ export function HelpPanel() {
               {tab === "arp" && <ArpTab />}
               {tab === "studio" && <StudioTab />}
               {tab === "faq" && <FaqTab />}
+              {tab === "about" && <AboutTab />}
             </div>
           )}
         </div>
@@ -164,8 +167,9 @@ function StartTab() {
         items={[
           <>Patch menu + arrows + star (favorite).</>,
           <>Live / Idle — audio engine state. MIDI name appears when a port is open.</>,
+          <>Transpose − / + (left of Live) — shifts every incoming note in semitones, including USB MIDI. Click the number to reset. −24…+24.</>,
           <>Voice counter — how many notes are sounding, including releases.</>,
-          <>Octave − / + — also <Kbd>Z</Kbd> / <Kbd>X</Kbd>.</>,
+          <>Octave − / + — shifts USB MIDI, computer keys, and the on-screen piano together (also <Kbd>Z</Kbd> / <Kbd>X</Kbd>). Header shows the sounding C of the A key.</>,
           <>Keyboard icon, Mute (gold = silent), DAW, Help, Panic.</>,
         ]}
       />
@@ -177,7 +181,7 @@ function PlayTab() {
   return (
     <>
       <H>On-screen piano</H>
-      <P>Three octaves, rooted at the header octave (default C3). Click / touch. Hide it when you use hardware.</P>
+      <P>Three octaves. Octave / transpose in the header move the sounding pitch; the keys stay put, like a small controller with an octave button.</P>
       <H>Computer keyboard</H>
       <P>
         Two rows, <Kbd>A</Kbd> is C of the current octave. Black keys sit on <Kbd>W</Kbd> <Kbd>E</Kbd> <Kbd>T</Kbd>{" "}
@@ -186,7 +190,7 @@ function PlayTab() {
       <Ul
         items={[
           <>White: A S D F G H J K L ; '</>,
-          <>Octave down / up: Z / X. Changing octave while a key is held will not stick a note.</>,
+          <>Octave down / up: Z / X — same octave as USB MIDI. Changing octave while a key is held will not stick a note.</>,
           <>Panic: Esc. Help: ?. Sliders do not steal the piano keys.</>,
           <>Typing in Search / Rename / Save still uses the text field, not notes.</>,
         ]}
@@ -268,6 +272,7 @@ function ArpTab() {
           <>Hold — latches the last chord after you lift your hands. Play a new chord (all keys up, then down) to replace it.</>,
           <>Mode: Up, Dn, U/D, Rnd (shuffle once per cycle), Ord (order played).</>,
           <>BPM, Gate (note length), Swing (even steps late), Oct (1–3 octaves), rate 1/4 … 1/16t.</>,
+          <>Tap (header, next to the voice count) — hit it twice or more in time. Averages the last taps into BPM (60–180). DAW clock still wins while Clock is following.</>,
         ]}
       />
       <H>16-step pattern</H>
@@ -298,6 +303,13 @@ function ArpTab() {
 function StudioTab() {
   return (
     <>
+      <H>Two layers</H>
+      <P>
+        Cards A and B under the header. Gold outline is the layer the faceplate edits. Power mutes a layer. Load a second
+        factory or user patch into B, then Stack (both on every key) or Split (A below the split note, B above). Level and pan
+        are per layer. Arp, pattern, and FX stay shared. 32 voices are shared — both layers on is about 16-note poly. Save
+        writes the whole stack into User.
+      </P>
       <H>Library</H>
       <Ul
         items={[
@@ -347,6 +359,22 @@ function FaqTab() {
       <P>
         Web Audio cannot load as VST/AU. Use DAW mode (IAC MIDI + optional BlackHole audio). Same sound, different wiring.
       </P>
+    </>
+  );
+}
+
+function AboutTab() {
+  return (
+    <>
+      <H>LYRA-32</H>
+      <P>
+        by Ray Bridge Digital · Mk IV.2 · Version 4.2. 32-voice hybrid synthesizer for Chrome, Edge, and Firefox. Dual
+        oscillator + sub + noise, dual LFO, 4-slot matrix, FX rack, arpeggiator with 16-step pattern, and two-layer stack
+        / split. USB-C MIDI, computer keys, or the on-screen piano. Not a VST/AU — DAW mode uses IAC MIDI.
+      </P>
+      <div className="lyra-about-brand">
+        <LayerBrand />
+      </div>
     </>
   );
 }

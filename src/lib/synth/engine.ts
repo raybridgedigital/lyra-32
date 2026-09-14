@@ -2,6 +2,7 @@ import type { LfoDest, LfoParams, Patch, Waveform } from "./types";
 import type { ArpStep } from "./arp";
 import { midiToFreq } from "./midi";
 import { INIT_PATCH, clonePatch } from "./patches";
+import { layersForNote, type EngineLayer, type EngineStack } from "./stack";
 
 const MAX_VOICES = 32;
 const SUPERSAW_DETUNE = [-11, -7, -3, 0, 3, 7, 11];
@@ -153,9 +154,11 @@ class Voice {
   private onEnded: () => void;
   private releaseTimer: number | null = null;
   private extras: AudioNode[] = [];
-  private patchSnap: Patch;
+  patchSnap: Patch;
   private bend: number;
   private fenv: ConstantSourceNode | null = null;
+  private layerAmp: GainNode;
+  layer: "a" | "b";
 
   constructor(
     ctx: AudioContext,
@@ -168,6 +171,7 @@ class Voice {
     dc: DcBank,
     now: number,
     onEnded: () => void,
+    layer?: { id: "a" | "b"; gain: number; pan: number },
   ) {
     this.ctx = ctx;
     this.midi = midi;
@@ -175,6 +179,7 @@ class Voice {
     this.onEnded = onEnded;
     this.patchSnap = patch;
     this.bend = bend;
+    this.layer = layer?.id ?? "a";
 
     this.mix = ctx.createGain();
     this.vca = ctx.createGain();
@@ -218,7 +223,11 @@ class Voice {
     this.filters[this.filters.length - 1]!.connect(this.vca);
     this.vca.connect(this.pan);
     this.pan.connect(this.expr);
-    this.expr.connect(dest);
+    this.layerAmp = ctx.createGain();
+    this.layerAmp.gain.setValueAtTime(clamp(layer?.gain ?? 1, 0, 1.5), now);
+    this.pan.pan.setValueAtTime(clamp(layer?.pan ?? 0, -1, 1), now);
+    this.expr.connect(this.layerAmp);
+    this.layerAmp.connect(dest);
 
     const uni = patch.unison.voices;
     this.spawnOsc(patch, "osc1", midi, bend, now, uni);
@@ -528,6 +537,11 @@ class Voice {
     return !this.dead && !this.releasing;
   }
 
+  setMix(gain: number, pan: number, now: number) {
+    this.layerAmp.gain.setTargetAtTime(clamp(gain, 0, 1.5), now, 0.03);
+    this.pan.pan.setTargetAtTime(clamp(pan, -1, 1), now, 0.03);
+  }
+
   kill() {
     if (this.dead) return;
     this.dead = true;
@@ -551,6 +565,7 @@ class Voice {
       this.mix.disconnect();
       this.pan.disconnect();
       this.expr.disconnect();
+      this.layerAmp.disconnect();
     } catch {
       /* */
     }
@@ -595,7 +610,7 @@ export class LyraEngine {
   analyser: AnalyserNode;
   private patch: Patch = clonePatch(INIT_PATCH);
   private voices: Voice[] = [];
-  private held = new Map<number, Voice | "arp">();
+  private held = new Map<number, Voice[] | "arp">();
   private sustain = false;
   private sustained = new Set<number>();
   private bend = 0;
@@ -625,6 +640,7 @@ export class LyraEngine {
   private arpDir = 1;
   private arpNoteCursor = 0;
   private arpVoice: Voice | null = null;
+  private arpVoices: Voice[] = [];
   private monoVoice: Voice | null = null;
   private monoStack: number[] = [];
   private listener: EngineListener;
@@ -633,6 +649,12 @@ export class LyraEngine {
   private muted = false;
   private arpBag: number[] = [];
   private arpBagKey = "";
+  private stack: EngineStack = {
+    mode: "stack",
+    splitNote: 60,
+    a: { id: "a", on: true, level: 1, pan: 0, patch: clonePatch(INIT_PATCH) },
+    b: { id: "b", on: false, level: 0.7, pan: 0.15, patch: clonePatch(INIT_PATCH) },
+  };
 
   constructor(ctx: AudioContext, listener: EngineListener = {}) {
     this.ctx = ctx;
@@ -792,8 +814,9 @@ export class LyraEngine {
     this.lfos.lfo2.type = this.patch.lfo2.wave;
     const q = 0.2 + this.patch.filter.resonance * 18;
     for (const v of this.voices) {
-      const hz = cutoffHz(this.patch.filter.cutoff + this.cutoffMod * 0.35, this.patch.filter.keyTrack, v.midi);
-      v.setCutoff(hz, q, now);
+      const p = v.patchSnap;
+      const hz = cutoffHz(p.filter.cutoff + this.cutoffMod * 0.35, p.filter.keyTrack, v.midi);
+      v.setCutoff(hz, 0.2 + p.filter.resonance * 18, now);
     }
     if (this.patch.arp.on) {
       this.absorbHeldIntoArp();
@@ -815,10 +838,10 @@ export class LyraEngine {
     this.cutoffMod = clamp(v, 0, 1);
     const now = this.ctx.currentTime;
     this.dc.mod.offset.setTargetAtTime(this.cutoffMod, now, 0.03);
-    const q = 0.2 + this.patch.filter.resonance * 18;
     for (const vo of this.voices) {
-      const hz = cutoffHz(this.patch.filter.cutoff + this.cutoffMod * 0.4, this.patch.filter.keyTrack, vo.midi);
-      vo.setCutoff(hz, q, now);
+      const p = vo.patchSnap;
+      const hz = cutoffHz(p.filter.cutoff + this.cutoffMod * 0.4, p.filter.keyTrack, vo.midi);
+      vo.setCutoff(hz, 0.2 + p.filter.resonance * 18, now);
     }
   }
 
@@ -838,6 +861,16 @@ export class LyraEngine {
   setMuted(on: boolean) {
     this.muted = on;
     this.buses.master.gain.setTargetAtTime(on ? 0 : clamp(this.patch.master, 0, 1), this.ctx.currentTime, 0.03);
+  }
+
+  setStack(next: EngineStack) {
+    this.stack = next;
+    const now = this.ctx.currentTime;
+    for (const v of this.voices) {
+      const L = v.layer === "b" ? next.b : next.a;
+      v.setMix(L.level, L.pan, now);
+      if (!L.on && v.live) v.release(L.patch);
+    }
   }
 
   setBend(semis: number) {
@@ -865,6 +898,7 @@ export class LyraEngine {
 
   noteOn(midi: number, velocity = 0.85) {
     kickContext(this.ctx);
+    if (!this.stack.a.on && !this.stack.b.on) return;
     if (this.patch.arp.on) {
       const replace = this.patch.arp.hold && this.arpPhysical.size === 0 && !this.sustain;
       if (replace) this.arpHeld = [];
@@ -875,23 +909,33 @@ export class LyraEngine {
       return;
     }
     const now = this.ctx.currentTime;
-    if (this.patch.polyMode === "poly") {
+    if (!this.stack.b.on) {
+      if (!this.stack.a.on) return;
+      if (this.patch.polyMode === "poly") {
+        this.spawn(midi, velocity, now);
+        return;
+      }
+
+      this.monoStack = this.monoStack.filter((n) => n !== midi);
+      const overlapping = this.monoStack.length > 0 && !!this.monoVoice?.live;
+      this.monoStack.push(midi);
+
+      if (this.patch.polyMode === "legato" && overlapping && this.monoVoice) {
+        this.monoVoice.glideTo(midi, this.bend, this.patch, now, true);
+        this.held.set(midi, [this.monoVoice]);
+        return;
+      }
+
+      if (this.monoVoice?.live) this.monoVoice.release(this.patch);
       this.spawn(midi, velocity, now);
       return;
     }
 
-    this.monoStack = this.monoStack.filter((n) => n !== midi);
-    const overlapping = this.monoStack.length > 0 && !!this.monoVoice?.live;
-    this.monoStack.push(midi);
-
-    if (this.patch.polyMode === "legato" && overlapping && this.monoVoice) {
-      this.monoVoice.glideTo(midi, this.bend, this.patch, now, true);
-      this.held.set(midi, this.monoVoice);
-      return;
+    const created: Voice[] = [];
+    for (const L of layersForNote(this.stack, midi)) {
+      created.push(this.spawnOne(midi, velocity, now, L));
     }
-
-    if (this.monoVoice?.live) this.monoVoice.release(this.patch);
-    this.spawn(midi, velocity, now);
+    if (created.length) this.held.set(midi, created);
   }
 
   noteOff(midi: number) {
@@ -913,6 +957,10 @@ export class LyraEngine {
       this.sustained.add(midi);
       return;
     }
+    if (this.stack.b.on) {
+      this.releaseNote(midi);
+      return;
+    }
     if (this.patch.polyMode === "poly") {
       this.releaseNote(midi);
       return;
@@ -930,6 +978,7 @@ export class LyraEngine {
     this.arpPhysical.clear();
     this.stopArp();
     this.monoVoice = null;
+    this.arpVoices = [];
     this.dc.at.offset.setValueAtTime(0, this.ctx.currentTime);
     this.dc.mod.offset.setValueAtTime(0, this.ctx.currentTime);
     this.cutoffMod = 0;
@@ -963,6 +1012,18 @@ export class LyraEngine {
   }
 
   private spawn(midi: number, velocity: number, now: number) {
+    const v = this.spawnOne(midi, velocity, now, {
+      id: "a",
+      on: this.stack.a.on,
+      level: this.stack.a.level,
+      pan: this.stack.a.pan,
+      patch: this.patch,
+    });
+    this.held.set(midi, [v]);
+    if (this.patch.polyMode !== "poly") this.monoVoice = v;
+  }
+
+  private spawnOne(midi: number, velocity: number, now: number, L: EngineLayer) {
     while (this.voices.length >= MAX_VOICES) {
       const oldest = this.voices[0];
       oldest?.kill();
@@ -971,7 +1032,7 @@ export class LyraEngine {
       this.ctx,
       this.buses.voice,
       this.lfos,
-      this.patch,
+      L.patch,
       midi,
       velocity,
       this.bend,
@@ -981,19 +1042,20 @@ export class LyraEngine {
         this.voices = this.voices.filter((x) => x !== v);
         if (this.monoVoice === v) this.monoVoice = null;
         if (this.arpVoice === v) this.arpVoice = null;
+        this.arpVoices = this.arpVoices.filter((x) => x !== v);
         this.listener.onVoices?.(this.voices.length);
       },
+      { id: L.id, gain: L.level, pan: L.pan },
     );
     this.voices.push(v);
-    this.held.set(midi, v);
-    if (this.patch.polyMode !== "poly") this.monoVoice = v;
     this.listener.onVoices?.(this.voices.length);
+    return v;
   }
 
   private absorbHeldIntoArp() {
     for (const [midi, v] of [...this.held.entries()]) {
       if (v === "arp") continue;
-      v.release(this.patch);
+      for (const voice of v) voice.release(this.patch);
       if (!this.arpHeld.includes(midi)) this.arpHeld.push(midi);
       this.arpPhysical.add(midi);
       this.held.set(midi, "arp");
@@ -1012,6 +1074,8 @@ export class LyraEngine {
     }
     this.arpVoice?.release(this.patch);
     this.arpVoice = null;
+    for (const v of this.arpVoices) v.release(this.patch);
+    this.arpVoices = [];
     this.arpIndex = 0;
     this.arpDir = 1;
     this.arpNoteCursor = 0;
@@ -1021,7 +1085,7 @@ export class LyraEngine {
   }
 
   private arpTick = () => {
-    if (!this.patch.arp.on || this.arpHeld.length === 0) {
+    if (!this.patch.arp.on || this.arpHeld.length === 0 || (!this.stack.a.on && !this.stack.b.on)) {
       this.stopArp();
       return;
     }
@@ -1055,13 +1119,17 @@ export class LyraEngine {
         note = expanded[this.arpIndex] ?? expanded[0]!;
       }
       const vel = st.accent ? 1 : 0.82;
-      this.arpVoice?.release(this.patch);
-      this.spawn(note, vel, now);
-      const voice = this.voices[this.voices.length - 1] ?? null;
-      this.arpVoice = voice;
+      for (const v of this.arpVoices) v.release(this.patch);
+      const specs = layersForNote(this.stack, note);
+      const created: Voice[] = [];
+      for (const L of specs) {
+        created.push(this.spawnOne(note, vel, now, L));
+      }
+      this.arpVoices = created;
+      this.arpVoice = created[0] ?? null;
       this.listener.onArpStep?.(usePat ? si : this.arpIndex, note);
       window.setTimeout(() => {
-        voice?.release(this.patch);
+        for (const voice of created) voice.release(this.patch);
       }, (stepDur * gate + swing) * 1000);
     } else {
       this.listener.onArpStep?.(si, null);

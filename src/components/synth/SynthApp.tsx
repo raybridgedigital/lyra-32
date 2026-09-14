@@ -2,8 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Activity,
   Cable,
-  ChevronLeft,
-  ChevronRight,
   CircleHelp,
   Keyboard as KeyboardIcon,
   Pencil,
@@ -17,6 +15,7 @@ import {
 import { cn } from "@/lib/cn";
 import { clonePatch, groupByCategory } from "@/lib/synth/patches";
 import { bindAudioUnlock, bindComputerKeyboard, useSynth } from "@/lib/synth/store";
+import { tapTempo } from "@/lib/synth/tap-tempo";
 import type {
   ArpMode,
   ArpRate,
@@ -35,6 +34,7 @@ import type {
 import { Keyboard } from "./Keyboard";
 import { DawPanel } from "./DawPanel";
 import { HelpPanel } from "./HelpPanel";
+import { LayerStrip } from "./LayerStrip";
 import { PatternBar } from "./PatternBar";
 import { AmtFader, Knob, LfoSlider, Seg } from "./Knob";
 import { Scope } from "./Scope";
@@ -110,7 +110,9 @@ export function SynthApp() {
   const midiName = useSynth((s) => s.midiName);
   const voices = useSynth((s) => s.voices);
   const octave = useSynth((s) => s.octave);
+  const transpose = useSynth((s) => s.transpose);
   const shiftOctave = useSynth((s) => s.shiftOctave);
+  const shiftTranspose = useSynth((s) => s.shiftTranspose);
   const panic = useSynth((s) => s.panic);
   const mute = useSynth((s) => s.masterMute);
   const toggleMute = useSynth((s) => s.toggleMute);
@@ -163,14 +165,6 @@ export function SynthApp() {
   const p = patch;
   const live = ctxState === "running";
 
-  const stepPatch = (dir: number) => {
-    if (!allPatches.length) return;
-    const i = allPatches.findIndex((x) => x.id === p.id);
-    const idx = i < 0 ? 0 : (i + dir + allPatches.length) % allPatches.length;
-    const next = allPatches[idx];
-    if (next) loadPatch(next);
-  };
-
   const setMatrix = (i: number, row: ModRoute) => {
     const matrix = [...p.matrix];
     matrix[i] = row;
@@ -185,89 +179,61 @@ export function SynthApp() {
       <header className="sticky top-0 z-20 border-b border-border bg-bg/95 px-3 py-1.5 backdrop-blur-sm">
         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
           <div className="flex min-w-0 items-center gap-3">
-            <div className="lyra-brand min-w-0 font-display text-lg font-bold tracking-tight text-accent sm:text-xl">
-              <span>LYRA-32</span>
-              <span className="lyra-byline">Mk IV.1 · by Ray Bridge Digital</span>
+            <div className="lyra-brand min-w-0">
+              <MidiBadge status={midiStatus} name={midiName} />
             </div>
-            <div className="ml-auto hidden w-36 shrink-0 lg:block">{engine ? <Scope compact /> : <div className="h-9 rounded-md bg-ink-soft" />}</div>
+            <div className="ml-auto flex items-center gap-2">
+              <div className="flex items-center" title="Transpose all incoming notes (MIDI, keys, piano)">
+                <button type="button" className="h-10 rounded-l-md bg-elevated px-2.5 text-base font-semibold" onClick={() => shiftTranspose(-1)} aria-label="Transpose down">
+                  −
+                </button>
+                <button
+                  type="button"
+                  className="h-10 min-w-12 bg-elevated px-1.5 font-mono text-sm font-semibold tabular-nums text-muted"
+                  title="Reset transpose"
+                  onClick={() => useSynth.setState({ transpose: 0 })}
+                >
+                  {transpose === 0 ? "0" : transpose > 0 ? `+${transpose}` : `${transpose}`}
+                  <span className="ml-0.5 text-[0.6rem] tracking-wide">TR</span>
+                </button>
+                <button type="button" className="h-10 rounded-r-md bg-elevated px-2.5 text-base font-semibold" onClick={() => shiftTranspose(1)} aria-label="Transpose up">
+                  +
+                </button>
+              </div>
+              <div
+                className={cn(
+                  "hidden h-10 w-14 shrink-0 items-center justify-center rounded-md text-sm font-semibold md:flex",
+                  live ? "text-accent" : "text-muted",
+                )}
+              >
+                {live ? "Live" : "Idle"}
+              </div>
+            </div>
           </div>
 
-          <div className="flex items-center justify-center gap-1">
-            <button
-              type="button"
-              aria-label="Previous patch"
-              className="grid size-10 shrink-0 place-items-center rounded-md bg-elevated text-fg"
-              onClick={() => stepPatch(-1)}
-            >
-              <ChevronLeft className="size-4" />
-            </button>
-            <select
-              aria-label="Load patch"
-              className="lyra-patch-select h-10 w-44 shrink-0 rounded-md bg-elevated px-2 text-base text-fg sm:w-56"
-              value={p.id}
-              onChange={(e) => {
-                const found = allPatches.find((x) => x.id === e.target.value);
-                if (found) loadPatch(found);
-              }}
-            >
-              {factoryGroups.map((g) => (
-                <optgroup key={g.category} label={`${g.category} (${g.patches.length})`}>
-                  {g.patches.map((x) => (
-                    <option key={x.id} value={x.id}>
-                      {x.name}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
-              {userPatches.length > 0 && (
-                <optgroup label={`User (${userPatches.length})`}>
-                  {userPatches.map((x) => (
-                    <option key={x.id} value={x.id}>
-                      {x.name}
-                    </option>
-                  ))}
-                </optgroup>
-              )}
-            </select>
-            <button
-              type="button"
-              aria-label="Next patch"
-              className="grid size-10 shrink-0 place-items-center rounded-md bg-elevated text-fg"
-              onClick={() => stepPatch(1)}
-            >
-              <ChevronRight className="size-4" />
-            </button>
-            <button
-              type="button"
-              aria-label={favorites.includes(p.id) ? "Remove from favorites" : "Add to favorites"}
-              className={cn(
-                "grid size-10 shrink-0 place-items-center rounded-md",
-                favorites.includes(p.id) ? "bg-accent text-accent-fg" : "bg-elevated text-muted hover:text-fg",
-              )}
-              onClick={() => toggleFavorite(p.id)}
-            >
-              <Star className={cn("size-4", favorites.includes(p.id) && "fill-current")} />
-            </button>
+          <div className="flex w-72 items-center justify-center sm:w-96">
+            <Scope compact />
           </div>
 
           <div className="flex min-w-0 items-center gap-2">
-            <div
-              className={cn(
-                "hidden h-10 w-14 shrink-0 items-center justify-center rounded-md text-sm font-semibold md:flex",
-                live ? "text-accent" : "text-muted",
-              )}
-            >
-              {live ? "Live" : "Idle"}
-            </div>
-            <MidiBadge status={midiStatus} name={midiName} />
             <div className="ml-auto flex items-center gap-2">
+            <button
+              type="button"
+              aria-label="Tap tempo"
+              title="Tap two or more times to set BPM"
+              onClick={() => tapTempo((tempo) => update(clonePatch(p, { arp: { ...p.arp, tempo } })))}
+              className="h-10 shrink-0 rounded-md bg-elevated px-3 text-base font-semibold text-muted hover:text-fg"
+            >
+              Tap
+            </button>
+            <BpmReadout tempo={p.arp.tempo} />
             <div
               className="flex h-10 w-12 shrink-0 items-center justify-center gap-1 font-mono text-sm tabular-nums text-muted"
             >
               <Activity className="size-3.5 shrink-0" />
               <span className="w-5 text-right">{voices}</span>
             </div>
-            <div className="flex items-center">
+            <div className="flex items-center" title="On-screen / computer keyboard octave">
               <button type="button" className="h-10 rounded-l-md bg-elevated px-2.5 text-base font-semibold" onClick={() => shiftOctave(-1)}>
                 −
               </button>
@@ -336,6 +302,8 @@ export function SynthApp() {
           </div>
         </div>
       </header>
+
+      <LayerStrip patches={allPatches} />
 
       <main className="flex min-h-0 w-full flex-1 flex-col px-1 py-1 sm:px-2">
         <div className={cn("lyra-face", showKeys && "keys-on")}>
@@ -577,6 +545,7 @@ export function SynthApp() {
           </Cell>
 
           <Cell title="Arpeggiator">
+            <div className="flex min-h-0 flex-1 flex-col justify-center gap-2.5">
             <div className="flex gap-1">
               <button
                 type="button"
@@ -615,9 +584,9 @@ export function SynthApp() {
                 />
               </div>
             </div>
-            <div className="lyra-knobs mt-2">
+            <div className="lyra-knobs flex-none">
               <Knob
-                label="BPM"
+                label="Tempo"
                 value={p.arp.tempo}
                 min={60}
                 max={180}
@@ -646,8 +615,9 @@ export function SynthApp() {
                 }
               />
             </div>
-            <div className="mt-2">
+            <div>
               <Seg
+                compact
                 value={p.arp.rate}
                 options={
                   [
@@ -661,10 +631,11 @@ export function SynthApp() {
                 onChange={(rate) => update(clonePatch(p, { arp: { ...p.arp, rate } }))}
               />
             </div>
+            </div>
           </Cell>
 
           <Cell title="Matrix" className="lyra-span-2">
-            <div className="flex min-h-0 flex-1 flex-col justify-evenly gap-2">
+            <div className="flex min-h-0 flex-1 flex-col justify-evenly gap-1.5">
               {p.matrix.map((row, i) => (
                 <div key={i} className="lyra-matrix-row">
                   <select
@@ -923,6 +894,23 @@ function LfoCell({ title, lfo, onChange }: { title: string; lfo: LfoParams; onCh
   );
 }
 
+function BpmReadout({ tempo }: { tempo: number }) {
+  const clockBpm = useSynth((s) => s.clockBpm);
+  const clockFollow = useSynth((s) => s.clockFollow);
+  const clockRunning = useSynth((s) => s.clockRunning);
+  const host = clockFollow && clockRunning && clockBpm ? Math.round(clockBpm) : null;
+  const bpm = host ?? Math.round(tempo);
+  return (
+    <div
+      className="flex h-10 min-w-14 shrink-0 flex-col items-center justify-center leading-none"
+      title={host ? "DAW clock" : "Arp tempo"}
+    >
+      <span className="font-mono text-base font-semibold tabular-nums text-fg">{bpm}</span>
+      <span className="text-[0.6rem] font-semibold tracking-wider text-subtle">{host ? "CLK" : "BPM"}</span>
+    </div>
+  );
+}
+
 function MidiBadge({ status, name }: { status: string; name: string | null }) {
   const label =
     status === "ok"
@@ -937,13 +925,13 @@ function MidiBadge({ status, name }: { status: string; name: string | null }) {
   return (
     <div
       className={cn(
-        "hidden h-10 w-40 items-center gap-1.5 truncate rounded-md px-2 text-sm sm:flex",
+        "lyra-midi-name flex max-w-none shrink-0 items-center gap-1.5 whitespace-nowrap font-semibold",
         status === "ok" ? "text-accent" : "text-muted",
       )}
       title={label}
     >
       <Usb className="size-4 shrink-0" />
-      <span className="truncate font-medium">{label}</span>
+      <span>{label}</span>
       <span className={cn("size-1.5 shrink-0 rounded-full", status === "ok" ? "bg-accent" : "bg-subtle")} />
     </div>
   );

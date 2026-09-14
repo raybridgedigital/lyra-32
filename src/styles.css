@@ -4,6 +4,7 @@
   --font-display: "Syne", ui-sans-serif, system-ui, sans-serif;
   --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "IBM Plex Sans", ui-monospace, ui-sans-serif, monospace;
+  --font-brand: "Cormorant Garamond", ui-serif, Georgia, serif;
 
   --color-bg: #0c0f14;
   --color-surface: #141a22;
@@ -100,31 +101,27 @@
     .lyra-face {
       grid-template-columns: repeat(4, minmax(0, 1fr));
       grid-template-rows: minmax(0, 1.2fr) minmax(0, 0.8fr) minmax(0, 1fr);
-      height: calc(100dvh - 7.1rem);
+      height: calc(100dvh - 8.9rem);
       min-height: 0;
     }
 
     .lyra-face.keys-on {
-      height: calc(100dvh - 13.5rem);
+      height: calc(100dvh - 15.3rem);
     }
   }
 
   .lyra-brand {
     display: flex;
     min-width: 0;
-    align-items: baseline;
-    gap: 0.5rem;
+    align-items: center;
+    gap: 0.65rem;
+    flex-wrap: nowrap;
   }
 
-  .lyra-byline {
-    overflow: hidden;
+  .lyra-midi-name {
     font-family: var(--font-sans);
-    font-size: 0.55em;
-    font-weight: 400;
-    letter-spacing: 0.04em;
-    color: var(--color-fg);
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    font-size: 1rem;
+    letter-spacing: 0.02em;
   }
 
   .lyra-patch-select {
@@ -143,6 +140,268 @@
 
   .lyra-span-full {
     grid-column: 1 / -1;
+  }
+
+  .lyra-layers {
+    display: grid;
+    grid-template-columns: minmax(0, 0.8fr) minmax(0, 0.6fr) minmax(0, 0.6fr) 9.5rem;
+    align-items: stretch;
+    gap: 6px;
+    margin: 4px 8px 0;
+    padding: 5px 6px;
+    overflow: hidden;
+    border-radius: var(--radius-xl);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-panel);
+  }
+
+  .lyra-layer-brand {
+    position: relative;
+    min-width: 0;
+    overflow: hidden;
+    border-radius: 10px;
+    background: var(--color-ink-soft);
+  }
+
+  .lyra-layer-brand img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: 88% 42%;
+    opacity: 0.88;
+  }
+
+  .lyra-layer-brand::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, rgb(12 15 20 / 78%) 0%, rgb(12 15 20 / 18%) 42%, rgb(12 15 20 / 8%) 100%);
+    pointer-events: none;
+  }
+
+  .lyra-layer-brand-copy {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    height: 100%;
+    align-items: center;
+    gap: 0.55rem;
+    padding: 0 0.85rem;
+  }
+
+  .lyra-layer-lyre {
+    width: 1.85rem;
+    height: 1.85rem;
+    flex-shrink: 0;
+    color: var(--color-accent);
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 1.35;
+  }
+
+  .lyra-layer-brand-mark {
+    font-family: var(--font-display);
+    font-size: 1.35rem;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    line-height: 1;
+    color: var(--color-accent);
+  }
+
+  .lyra-layer-brand-by {
+    margin-top: 0.18rem;
+    font-family: var(--font-brand);
+    font-size: 0.95rem;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    color: #f3eee4;
+    white-space: nowrap;
+  }
+
+  .lyra-layer-brand-by span {
+    font-style: italic;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    color: var(--color-muted);
+  }
+
+  .lyra-layer-brand-wave {
+    position: absolute;
+    right: 0.4rem;
+    bottom: 0.35rem;
+    left: 38%;
+    z-index: 1;
+    height: 1.15rem;
+    width: auto;
+    fill: none;
+    stroke: var(--color-accent);
+    stroke-linecap: round;
+    stroke-width: 1.4;
+    opacity: 0.45;
+  }
+
+  .lyra-layer-card {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    justify-content: center;
+    gap: 1px;
+    overflow: hidden;
+    border-radius: 10px;
+    border: 1px solid var(--color-border);
+    background: var(--color-elevated);
+    padding: 4px 8px 5px;
+    text-align: left;
+  }
+
+  .lyra-layer-card.is-edit {
+    border-color: var(--color-accent);
+    box-shadow: inset 0 0 0 1px var(--color-accent);
+  }
+
+  .lyra-layer-top {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .lyra-layer-id {
+    display: grid;
+    width: 1.25rem;
+    height: 1.25rem;
+    flex-shrink: 0;
+    place-items: center;
+    border-radius: 4px;
+    background: var(--color-bg);
+    font-size: 0.7rem;
+    font-weight: 800;
+    color: var(--color-muted);
+  }
+
+  .lyra-layer-card.is-edit .lyra-layer-id {
+    background: var(--color-accent);
+    color: var(--color-accent-fg);
+  }
+
+  .lyra-layer-name {
+    min-width: 0;
+    width: 40%;
+    max-width: 40%;
+    flex: 0 1 40%;
+    height: 1.6rem;
+    overflow: hidden;
+    border: 0;
+    background: transparent;
+    padding: 0;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--color-fg);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .lyra-layer-power {
+    display: grid;
+    width: 1.6rem;
+    height: 1.6rem;
+    flex-shrink: 0;
+    place-items: center;
+    border-radius: 999px;
+    color: var(--color-subtle);
+    background: var(--color-bg);
+  }
+
+  .lyra-layer-power.is-on {
+    color: var(--color-accent-fg);
+    background: var(--color-accent);
+  }
+
+  .lyra-layer-meta {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--color-subtle);
+  }
+
+  .lyra-layer-faders {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+  }
+
+  .lyra-layer-fader {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    min-width: 0;
+  }
+
+  .lyra-layer-fader-k {
+    width: 1.6rem;
+    flex-shrink: 0;
+    border: 0;
+    background: transparent;
+    padding: 0;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-align: left;
+    text-transform: uppercase;
+    color: var(--color-subtle);
+  }
+
+  button.lyra-layer-fader-k:hover {
+    color: var(--color-accent);
+  }
+
+  .lyra-layer-fader input {
+    flex: 1 1 auto;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    accent-color: var(--color-accent);
+  }
+
+  .lyra-layer-fader-v {
+    width: 2rem;
+    flex-shrink: 0;
+    border: 0;
+    background: transparent;
+    padding: 0;
+    text-align: right;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--color-fg);
+  }
+
+  .lyra-layer-tools {
+    display: flex;
+    width: 9.5rem;
+    min-width: 9.5rem;
+    flex-direction: column;
+    justify-content: center;
+    gap: 3px;
+  }
+
+  .lyra-about-brand {
+    margin-top: 1.25rem;
+    height: 6.5rem;
+  }
+
+  .lyra-about-brand .lyra-layer-brand {
+    height: 100%;
   }
 
   .lyra-seq {
@@ -174,6 +433,32 @@
   .lyra-seq-toggle.is-on {
     color: var(--color-accent-fg);
     background: var(--color-accent);
+  }
+
+  .lyra-seq-tap {
+    min-width: 3.4rem;
+  }
+
+  .lyra-seq-bpm {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-width: 3.4rem;
+    padding: 0 0.35rem;
+    font-family: var(--font-mono);
+    font-size: 0.95rem;
+    font-weight: 700;
+    line-height: 1.05;
+    color: var(--color-fg);
+  }
+
+  .lyra-seq-bpm span {
+    font-family: var(--font-sans);
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: var(--color-subtle);
   }
 
   .lyra-steps {
@@ -307,12 +592,12 @@
     min-width: 0;
     grid-template-columns: 5.5rem 5.5rem minmax(0, 1fr);
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.35rem;
   }
 
   .lyra-knob {
-    width: 4.5rem;
-    height: 4.5rem;
+    width: 4.05rem;
+    height: 4.05rem;
   }
 
   .lyra-lfo-sliders {

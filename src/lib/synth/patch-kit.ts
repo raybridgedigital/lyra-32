@@ -133,6 +133,23 @@ export function normalizePatch(p: Patch): Patch {
       tempo: Number.isFinite(p.arp?.tempo) ? p.arp.tempo : 120,
       steps: normalizeArpSteps(p.arp?.steps),
     },
+    stack: normalizeStackField(p.stack),
+  };
+}
+
+function normalizeStackField(raw: Patch["stack"] | undefined): Patch["stack"] {
+  if (!raw || !raw.b || typeof raw.b !== "object" || !("patch" in raw.b) || !raw.b.patch) return undefined;
+  const mix = (m: { on?: boolean; level?: number; pan?: number } | undefined, fallbackOn: boolean) => ({
+    on: m?.on ?? fallbackOn,
+    level: Number.isFinite(m?.level) ? Math.max(0, Math.min(1, m!.level as number)) : fallbackOn ? 1 : 0.7,
+    pan: Number.isFinite(m?.pan) ? Math.max(-1, Math.min(1, m!.pan as number)) : 0,
+  });
+  const inner = normalizePatch({ ...raw.b.patch, stack: undefined } as Patch);
+  return {
+    mode: raw.mode === "split" ? "split" : "stack",
+    splitNote: Math.max(0, Math.min(127, Math.round(raw.splitNote ?? 60))),
+    a: mix(raw.a, true),
+    b: { ...mix(raw.b, false), patch: inner },
   };
 }
 

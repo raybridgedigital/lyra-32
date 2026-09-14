@@ -1,8 +1,9 @@
 import { create } from "zustand";
-import type { MidiStatus, Patch } from "./types";
+import type { LayerId, LayerMix, MidiStatus, Patch, StackMode } from "./types";
 import { FACTORY, INIT_PATCH, clonePatch } from "./patches";
 import { LyraEngine, createEngine } from "./engine";
 import { QWERTY_MAP, connectMidi, setMidiPortFilter, type MidiPortInfo } from "./midi";
+import { defaultMix } from "./stack";
 
 const USER_KEY = "lyra32-user-patches";
 const KEYS_KEY = "lyra32-show-keys";
@@ -52,6 +53,13 @@ function saveFavs(ids: string[]) {
 
 type State = {
   patch: Patch;
+  layer: LayerId;
+  layerA: Patch;
+  layerB: Patch;
+  mixA: LayerMix;
+  mixB: LayerMix;
+  stackMode: StackMode;
+  splitNote: number;
   factory: Patch[];
   userPatches: Patch[];
   favorites: string[];
@@ -68,6 +76,7 @@ type State = {
   helpOpen: boolean;
   voices: number;
   octave: number;
+  transpose: number;
   activeNotes: number[];
   arpStep: number;
   masterMute: boolean;
@@ -83,6 +92,7 @@ type State = {
   noteOn: (midi: number, vel?: number) => void;
   noteOff: (midi: number) => void;
   shiftOctave: (d: number) => void;
+  shiftTranspose: (d: number) => void;
   panic: () => void;
   toggleMute: () => void;
   toggleKeys: () => void;
@@ -90,12 +100,33 @@ type State = {
   setClockFollow: (on: boolean) => void;
   setDawOpen: (on: boolean) => void;
   setHelpOpen: (on: boolean) => void;
+  selectLayer: (id: LayerId) => void;
+  setLayerOn: (id: LayerId, on: boolean) => void;
+  setLayerLevel: (id: LayerId, level: number) => void;
+  setLayerPan: (id: LayerId, pan: number) => void;
+  setStackMode: (mode: StackMode) => void;
+  setSplitNote: (note: number) => void;
   hydrate: () => void;
 };
 
+function shareFx(from: Patch, onto: Patch): Patch {
+  return clonePatch(onto, { fx: from.fx, arp: from.arp, master: from.master });
+}
+
+function pushEngine(get: () => State) {
+  const s = get();
+  s.engine?.setStack({
+    mode: s.stackMode,
+    splitNote: s.splitNote,
+    a: { id: "a", on: s.mixA.on, level: s.mixA.level, pan: s.mixA.pan, patch: s.layerA },
+    b: { id: "b", on: s.mixB.on, level: s.mixB.level, pan: s.mixB.pan, patch: s.layerB },
+  });
+  s.engine?.applyPatch(s.patch);
+}
 let midiUnsub: (() => void) | null = null;
 let midiQueued = false;
 const heldKeys = new Map<string, number>();
+const soundingByInput = new Map<number, number>();
 
 function blocksComputerKeys(t: EventTarget | null) {
   if (!t || !(t instanceof HTMLElement)) return false;
@@ -169,6 +200,7 @@ function bootEngine(): LyraEngine {
   });
   engine.applyPatch(useSynth.getState().patch);
   useSynth.setState({ engine, armed: true, ctxState: engine.ctx.state });
+  pushEngine(() => useSynth.getState());
   hookMidi(engine);
 
   const onVis = () => {
@@ -181,6 +213,13 @@ function bootEngine(): LyraEngine {
 
 export const useSynth = create<State>((set, get) => ({
   patch: clonePatch(INIT_PATCH),
+  layer: "a" as LayerId,
+  layerA: clonePatch(INIT_PATCH),
+  layerB: clonePatch(INIT_PATCH),
+  mixA: defaultMix(true),
+  mixB: { on: false, level: 0.7, pan: 0.15 },
+  stackMode: "stack" as StackMode,
+  splitNote: 60,
   factory: FACTORY,
   userPatches: loadUser(),
   favorites: loadFavs(),
@@ -197,6 +236,7 @@ export const useSynth = create<State>((set, get) => ({
   helpOpen: false,
   voices: 0,
   octave: 0,
+  transpose: 0,
   activeNotes: [],
   arpStep: -1,
   masterMute: false,
@@ -208,25 +248,66 @@ export const useSynth = create<State>((set, get) => ({
   },
 
   loadPatch: (p) => {
-    const next = clonePatch(p);
-    set({ patch: next });
-    get().engine?.applyPatch(next);
+    const stacked = p.stack?.b?.patch;
+    if (stacked) {
+      const a = clonePatch({ ...p, stack: undefined });
+      const b = shareFx(a, clonePatch({ ...stacked, stack: undefined }));
+      set({
+        layer: "a",
+        patch: a,
+        layerA: a,
+        layerB: b,
+        mixA: { on: p.stack!.a.on, level: p.stack!.a.level, pan: p.stack!.a.pan },
+        mixB: { on: p.stack!.b.on, level: p.stack!.b.level, pan: p.stack!.b.pan },
+        stackMode: p.stack!.mode,
+        splitNote: p.stack!.splitNote,
+      });
+    } else {
+      const next = clonePatch({ ...p, stack: undefined });
+      const s = get();
+      if (s.layer === "b") {
+        const layerB = shareFx(s.layerA, next);
+        set({ patch: layerB, layerB, mixB: { ...s.mixB, on: true } });
+      } else {
+        const layerA = next;
+        set({ patch: layerA, layerA, layerB: shareFx(layerA, s.layerB) });
+      }
+    }
+    pushEngine(get);
   },
 
   setPatch: (p) => {
-    set({ patch: p });
-    get().engine?.applyPatch(p);
+    const s = get();
+    if (s.layer === "b") {
+      const layerB = p;
+      const layerA = shareFx(p, s.layerA);
+      set({ patch: layerB, layerB, layerA });
+    } else {
+      const layerA = p;
+      const layerB = shareFx(p, s.layerB);
+      set({ patch: layerA, layerA, layerB });
+    }
+    pushEngine(get);
   },
 
   saveUserPatch: (name) => {
-    const p = clonePatch(get().patch, {
-      id: `user-${Date.now()}`,
-      name: name.trim() || "User patch",
-      category: "User",
-    });
-    const userPatches = [...get().userPatches, p];
+    const s = get();
+    const id = `user-${Date.now()}`;
+    const label = name.trim() || "User patch";
+    let p = clonePatch(s.layerA, { id, name: label, category: "User", stack: undefined });
+    if (s.mixB.on) {
+      p = clonePatch(p, {
+        stack: {
+          mode: s.stackMode,
+          splitNote: s.splitNote,
+          a: s.mixA,
+          b: { ...s.mixB, patch: clonePatch({ ...s.layerB, stack: undefined }) },
+        },
+      });
+    }
+    const userPatches = [...s.userPatches, p];
     saveUser(userPatches);
-    set({ userPatches, patch: p });
+    set({ userPatches, patch: s.layer === "a" ? p : s.patch, layerA: s.layer === "a" ? p : s.layerA });
   },
 
   renameUserPatch: (id, name) => {
@@ -255,24 +336,30 @@ export const useSynth = create<State>((set, get) => ({
 
   noteOn: (midi, vel = 0.85) => {
     const engine = bootEngine();
+    const sounded = clampInt(midi + get().octave * 12 + get().transpose, 0, 127);
+    soundingByInput.set(midi, sounded);
     try {
-      engine.noteOn(midi, vel);
+      engine.noteOn(sounded, vel);
     } catch (err) {
       console.error("lyra noteOn", err);
     }
     const { activeNotes } = get();
-    if (!activeNotes.includes(midi)) set({ activeNotes: [...activeNotes, midi] });
+    if (!activeNotes.includes(sounded)) set({ activeNotes: [...activeNotes, sounded] });
   },
 
   noteOff: (midi) => {
-    get().engine?.noteOff(midi);
-    set({ activeNotes: get().activeNotes.filter((n) => n !== midi) });
+    const sounded = soundingByInput.get(midi) ?? clampInt(midi + get().octave * 12 + get().transpose, 0, 127);
+    soundingByInput.delete(midi);
+    get().engine?.noteOff(sounded);
+    set({ activeNotes: get().activeNotes.filter((n) => n !== sounded) });
   },
 
   shiftOctave: (d) => set({ octave: clampInt(get().octave + d, -3, 4) }),
+  shiftTranspose: (d) => set({ transpose: clampInt(get().transpose + d, -24, 24) }),
 
   panic: () => {
     get().engine?.panic();
+    soundingByInput.clear();
     set({ activeNotes: [] });
   },
 
@@ -316,6 +403,41 @@ export const useSynth = create<State>((set, get) => ({
 
   setDawOpen: (on) => set({ dawOpen: on, helpOpen: on ? false : get().helpOpen }),
   setHelpOpen: (on) => set({ helpOpen: on, dawOpen: on ? false : get().dawOpen }),
+
+  selectLayer: (id) => {
+    const s = get();
+    const patch = id === "b" ? s.layerB : s.layerA;
+    set({ layer: id, patch });
+    s.engine?.applyPatch(patch);
+  },
+
+  setLayerOn: (id, on) => {
+    if (id === "a") set({ mixA: { ...get().mixA, on } });
+    else set({ mixB: { ...get().mixB, on } });
+    pushEngine(get);
+  },
+
+  setLayerLevel: (id, level) => {
+    if (id === "a") set({ mixA: { ...get().mixA, level } });
+    else set({ mixB: { ...get().mixB, level } });
+    pushEngine(get);
+  },
+
+  setLayerPan: (id, pan) => {
+    if (id === "a") set({ mixA: { ...get().mixA, pan } });
+    else set({ mixB: { ...get().mixB, pan } });
+    pushEngine(get);
+  },
+
+  setStackMode: (mode) => {
+    set({ stackMode: mode });
+    pushEngine(get);
+  },
+
+  setSplitNote: (note) => {
+    set({ splitNote: Math.max(24, Math.min(96, Math.round(note))) });
+    pushEngine(get);
+  },
 
   hydrate: () => {
     let showKeys = true;
@@ -370,7 +492,7 @@ export function bindComputerKeyboard() {
     if (!(k in QWERTY_MAP)) return;
     e.preventDefault();
     if (heldKeys.has(k)) return;
-    const midi = 48 + useSynth.getState().octave * 12 + QWERTY_MAP[k]!;
+    const midi = 48 + QWERTY_MAP[k]!;
     heldKeys.set(k, midi);
     useSynth.getState().noteOn(midi, 0.88);
   };

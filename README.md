@@ -1,10 +1,19 @@
-# LYRA-32 Mk IV.1
+# LYRA-32 Mk IV.2
 
 Hybrid polyphonic web synthesizer by [Raybridge Digital](https://github.com/raybridgedigital).
 
 Play from a class-compliant USB-C MIDI keyboard, the computer keys (A–L), or the on-screen piano. Chrome / Edge / Firefox.
 
-This tag is the restore point **before** the 2-layer stack.
+This tag is the restore point **before** the phrase sequencer / drums.
+
+## Mk IV.2 (v4.2)
+
+- Dual-layer stack / split (A + B), independent patches, level / pan, mute that actually silences
+- Logo plate + *by Ray Bridge Digital*
+- Tap tempo (header) + BPM readout; arp Tempo knob
+- Global octave (USB MIDI + computer keys + on-screen piano) and transpose (−24…+24)
+- Layer A/B pan click-reset; Help → About
+- Restore: `git checkout v4.2.0`
 
 ## Mk IV.1 (v4.1)
 

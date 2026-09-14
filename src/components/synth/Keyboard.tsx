@@ -10,13 +10,15 @@ function isBlack(pc: number) {
 
 export function Keyboard() {
   const octave = useSynth((s) => s.octave);
+  const transpose = useSynth((s) => s.transpose);
   const active = useSynth((s) => s.activeNotes);
   const noteOn = useSynth((s) => s.noteOn);
   const noteOff = useSynth((s) => s.noteOff);
 
-  const start = 36 + octave * 12;
-  const keys = useMemo(() => Array.from({ length: 37 }, (_, i) => start + i), [start]);
+  const start = 36;
+  const keys = useMemo(() => Array.from({ length: 37 }, (_, i) => start + i), []);
   const whites = keys.filter((n) => WHITE.includes(n % 12));
+  const sounding = (midi: number) => midi + octave * 12 + transpose;
 
   const press = (midi: number) => (e: React.PointerEvent) => {
     e.preventDefault();
@@ -33,7 +35,7 @@ export function Keyboard() {
     <div className="relative h-16 w-full overflow-hidden rounded-lg bg-elevated">
       <div className="absolute inset-0 flex">
         {whites.map((midi) => {
-          const on = active.includes(midi);
+          const on = active.includes(sounding(midi));
           return (
             <button
               key={midi}
@@ -55,7 +57,7 @@ export function Keyboard() {
           const nextBlack = midi + 1;
           const hasBlack = isBlack(nextBlack % 12) && keys.includes(nextBlack);
           if (!hasBlack) return <div key={midi} className="relative min-w-0 flex-1" />;
-          const on = active.includes(nextBlack);
+          const on = active.includes(sounding(nextBlack));
           return (
             <div key={midi} className="relative min-w-0 flex-1">
               <button

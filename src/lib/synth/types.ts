@@ -85,6 +85,23 @@ export type Patch = {
   polyMode: PolyMode;
   master: number;
   arp: ArpParams;
+  stack?: PatchStack;
 };
 
 export type MidiStatus = "idle" | "ok" | "denied" | "unsupported" | "none";
+
+export type LayerId = "a" | "b";
+export type StackMode = "stack" | "split";
+
+export type LayerMix = {
+  on: boolean;
+  level: number;
+  pan: number;
+};
+
+export type PatchStack = {
+  mode: StackMode;
+  splitNote: number;
+  a: LayerMix;
+  b: LayerMix & { patch: Patch };
+};
