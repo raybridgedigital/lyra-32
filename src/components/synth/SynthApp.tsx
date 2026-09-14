@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Activity,
+  Cable,
   ChevronLeft,
   ChevronRight,
   Keyboard as KeyboardIcon,
+  Pencil,
   Save,
+  Star,
   Trash2,
   Volume2,
   VolumeX,
@@ -29,6 +32,7 @@ import type {
   Waveform,
 } from "@/lib/synth/types";
 import { Keyboard } from "./Keyboard";
+import { DawPanel } from "./DawPanel";
 import { AmtFader, Knob, Seg } from "./Knob";
 import { Scope } from "./Scope";
 
@@ -94,7 +98,10 @@ export function SynthApp() {
   const factory = useSynth((s) => s.factory);
   const userPatches = useSynth((s) => s.userPatches);
   const saveUserPatch = useSynth((s) => s.saveUserPatch);
+  const renameUserPatch = useSynth((s) => s.renameUserPatch);
   const deleteUserPatch = useSynth((s) => s.deleteUserPatch);
+  const favorites = useSynth((s) => s.favorites);
+  const toggleFavorite = useSynth((s) => s.toggleFavorite);
   const midiStatus = useSynth((s) => s.midiStatus);
   const midiName = useSynth((s) => s.midiName);
   const voices = useSynth((s) => s.voices);
@@ -105,10 +112,16 @@ export function SynthApp() {
   const toggleMute = useSynth((s) => s.toggleMute);
   const showKeys = useSynth((s) => s.showKeys);
   const toggleKeys = useSynth((s) => s.toggleKeys);
+  const dawOpen = useSynth((s) => s.dawOpen);
+  const setDawOpen = useSynth((s) => s.setDawOpen);
+  const clockFollow = useSynth((s) => s.clockFollow);
+  const clockRunning = useSynth((s) => s.clockRunning);
   const engine = useSynth((s) => s.engine);
   const [nameDraft, setNameDraft] = useState("");
   const [libCat, setLibCat] = useState("All");
   const [libQ, setLibQ] = useState("");
+  const [renameId, setRenameId] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState("");
 
   useEffect(() => {
     useSynth.getState().hydrate();
@@ -125,14 +138,19 @@ export function SynthApp() {
 
   const allPatches = useMemo(() => [...factory, ...userPatches], [factory, userPatches]);
   const factoryGroups = useMemo(() => groupByCategory(factory), [factory]);
+  const favoritePatches = useMemo(
+    () => allPatches.filter((x) => favorites.includes(x.id)),
+    [allPatches, favorites],
+  );
   const filteredFactory = useMemo(() => {
     const q = libQ.trim().toLowerCase();
-    return factory.filter((x) => {
-      if (libCat !== "All" && x.category !== libCat) return false;
+    const pool = libCat === "Favorite" ? favoritePatches : factory;
+    return pool.filter((x) => {
+      if (libCat !== "All" && libCat !== "Favorite" && x.category !== libCat) return false;
       if (!q) return true;
       return x.name.toLowerCase().includes(q) || x.category.toLowerCase().includes(q);
     });
-  }, [factory, libCat, libQ]);
+  }, [factory, favoritePatches, libCat, libQ]);
 
   const update = (next: Patch) => setPatch(next);
   const p = patch;
@@ -162,7 +180,7 @@ export function SynthApp() {
           <div className="flex min-w-0 items-center gap-3">
             <div className="lyra-brand min-w-0 font-display text-lg font-bold tracking-tight text-accent sm:text-xl">
               <span>LYRA-32</span>
-              <span className="lyra-byline">by Ray Bridge Digital</span>
+              <span className="lyra-byline">Mk III · by Ray Bridge Digital</span>
             </div>
             <div className="ml-auto hidden w-36 shrink-0 lg:block">{engine ? <Scope compact /> : <div className="h-9 rounded-md bg-ink-soft" />}</div>
           </div>
@@ -212,6 +230,17 @@ export function SynthApp() {
             >
               <ChevronRight className="size-4" />
             </button>
+            <button
+              type="button"
+              aria-label={favorites.includes(p.id) ? "Remove from favorites" : "Add to favorites"}
+              className={cn(
+                "grid size-10 shrink-0 place-items-center rounded-md",
+                favorites.includes(p.id) ? "bg-accent text-accent-fg" : "bg-elevated text-muted hover:text-fg",
+              )}
+              onClick={() => toggleFavorite(p.id)}
+            >
+              <Star className={cn("size-4", favorites.includes(p.id) && "fill-current")} />
+            </button>
           </div>
 
           <div className="flex min-w-0 items-center gap-2">
@@ -256,6 +285,23 @@ export function SynthApp() {
               aria-label={mute ? "Unmute" : "Mute"}
             >
               {mute ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                useSynth.getState().arm();
+                setDawOpen(true);
+              }}
+              className={cn(
+                "h-10 rounded-md px-3 text-base font-semibold",
+                dawOpen || (clockFollow && clockRunning) ? "bg-accent text-accent-fg" : "bg-elevated text-muted hover:text-fg",
+              )}
+              title="DAW / IAC setup"
+            >
+              <span className="inline-flex items-center gap-1.5">
+                <Cable className="size-4" />
+                DAW
+              </span>
             </button>
             <button
               type="button"
@@ -598,6 +644,17 @@ export function SynthApp() {
             >
               All
             </button>
+            <button
+              type="button"
+              onClick={() => setLibCat("Favorite")}
+              className={cn(
+                "h-12 rounded-md px-3.5 text-lg font-medium",
+                libCat === "Favorite" ? "bg-accent text-accent-fg" : "bg-elevated text-muted hover:text-fg",
+              )}
+            >
+              Favorite
+              <span className="ml-1 tabular-nums opacity-70">{favoritePatches.length}</span>
+            </button>
             {factoryGroups.map((g) => (
               <button
                 key={g.category}
@@ -620,20 +677,42 @@ export function SynthApp() {
             className="mt-3 h-11 w-full rounded-lg bg-elevated px-3 text-sm text-fg placeholder:text-subtle"
           />
           <div className="mt-3 grid grid-cols-2 gap-1 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-            {filteredFactory.map((x) => (
-              <button
-                key={x.id}
-                type="button"
-                onClick={() => loadPatch(x)}
-                className={cn(
-                  "truncate rounded-md px-3 py-2.5 text-left text-lg",
-                  x.id === p.id ? "bg-accent text-accent-fg" : "bg-elevated text-fg hover:text-accent",
-                )}
-                title={`${x.category} — ${x.name}`}
-              >
-                {x.name}
-              </button>
-            ))}
+            {filteredFactory.map((x) => {
+              const fav = favorites.includes(x.id);
+              return (
+                <div
+                  key={x.id}
+                  className={cn(
+                    "flex min-w-0 items-center rounded-md",
+                    x.id === p.id ? "bg-accent text-accent-fg" : "bg-elevated text-fg",
+                  )}
+                >
+                  <button
+                    type="button"
+                    onClick={() => loadPatch(x)}
+                    className={cn(
+                      "min-w-0 flex-1 truncate px-3 py-2.5 text-left text-lg",
+                      x.id !== p.id && "hover:text-accent",
+                    )}
+                    title={`${x.category} — ${x.name}`}
+                  >
+                    {x.name}
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={fav ? `Unfavorite ${x.name}` : `Favorite ${x.name}`}
+                    className={cn(
+                      "grid size-10 shrink-0 place-items-center",
+                      fav ? "text-accent" : "text-muted hover:text-fg",
+                      x.id === p.id && "text-accent-fg",
+                    )}
+                    onClick={() => toggleFavorite(x.id)}
+                  >
+                    <Star className={cn("size-4", fav && "fill-current")} />
+                  </button>
+                </div>
+              );
+            })}
           </div>
           <div className="mt-4 flex flex-col gap-3 sm:flex-row">
             <input
@@ -658,13 +737,51 @@ export function SynthApp() {
             <ul className="mt-3 divide-y divide-border">
               {userPatches.map((u) => (
                 <li key={u.id} className="flex items-center gap-2 py-2">
-                  <button type="button" className="flex-1 text-left text-lg hover:text-accent" onClick={() => loadPatch(u)}>
-                    {u.name}
+                  {renameId === u.id ? (
+                    <input
+                      autoFocus
+                      value={renameDraft}
+                      aria-label={`Rename ${u.name}`}
+                      className="h-10 min-w-0 flex-1 rounded-md bg-elevated px-3 text-lg text-fg"
+                      onChange={(e) => setRenameDraft(e.target.value)}
+                      onBlur={(e) => {
+                        if (e.currentTarget.dataset.cancel === "1") return;
+                        renameUserPatch(u.id, renameDraft);
+                        setRenameId(null);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          renameUserPatch(u.id, renameDraft);
+                          setRenameId(null);
+                          e.currentTarget.blur();
+                        }
+                        if (e.key === "Escape") {
+                          e.currentTarget.dataset.cancel = "1";
+                          setRenameId(null);
+                          e.currentTarget.blur();
+                        }
+                      }}
+                    />
+                  ) : (
+                    <button type="button" className="min-w-0 flex-1 truncate text-left text-lg hover:text-accent" onClick={() => loadPatch(u)}>
+                      {u.name}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    aria-label={`Rename ${u.name}`}
+                    className="grid size-10 shrink-0 place-items-center rounded-md text-muted hover:text-fg"
+                    onClick={() => {
+                      setRenameId(u.id);
+                      setRenameDraft(u.name);
+                    }}
+                  >
+                    <Pencil className="size-4" />
                   </button>
                   <button
                     type="button"
                     aria-label={`Delete ${u.name}`}
-                    className="grid size-10 place-items-center rounded-md text-muted hover:text-fg"
+                    className="grid size-10 shrink-0 place-items-center rounded-md text-muted hover:text-fg"
                     onClick={() => deleteUserPatch(u.id)}
                   >
                     <Trash2 className="size-4" />
@@ -690,6 +807,7 @@ export function SynthApp() {
           </div>
         </div>
       )}
+      <DawPanel />
     </div>
   );
 }

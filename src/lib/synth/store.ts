@@ -2,10 +2,13 @@ import { create } from "zustand";
 import type { MidiStatus, Patch } from "./types";
 import { FACTORY, INIT_PATCH, clonePatch } from "./patches";
 import { LyraEngine, createEngine } from "./engine";
-import { QWERTY_MAP, connectMidi } from "./midi";
+import { QWERTY_MAP, connectMidi, setMidiPortFilter, type MidiPortInfo } from "./midi";
 
 const USER_KEY = "lyra32-user-patches";
 const KEYS_KEY = "lyra32-show-keys";
+const PORT_KEY = "lyra32-midi-port";
+const CLOCK_KEY = "lyra32-clock-follow";
+const FAV_KEY = "lyra32-favorites";
 
 function loadUser(): Patch[] {
   if (typeof window === "undefined") return [];
@@ -27,14 +30,41 @@ function saveUser(patches: Patch[]) {
   }
 }
 
+function loadFavs(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(FAV_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveFavs(ids: string[]) {
+  try {
+    localStorage.setItem(FAV_KEY, JSON.stringify(ids));
+  } catch {
+    /* quota */
+  }
+}
+
 type State = {
   patch: Patch;
   factory: Patch[];
   userPatches: Patch[];
+  favorites: string[];
   armed: boolean;
   ctxState: AudioContextState | "none";
   midiStatus: MidiStatus;
   midiName: string | null;
+  midiPorts: MidiPortInfo[];
+  midiPortId: string;
+  clockBpm: number | null;
+  clockRunning: boolean;
+  clockFollow: boolean;
+  dawOpen: boolean;
   voices: number;
   octave: number;
   activeNotes: number[];
@@ -46,13 +76,18 @@ type State = {
   loadPatch: (p: Patch) => void;
   setPatch: (p: Patch) => void;
   saveUserPatch: (name: string) => void;
+  renameUserPatch: (id: string, name: string) => void;
   deleteUserPatch: (id: string) => void;
+  toggleFavorite: (id: string) => void;
   noteOn: (midi: number, vel?: number) => void;
   noteOff: (midi: number) => void;
   shiftOctave: (d: number) => void;
   panic: () => void;
   toggleMute: () => void;
   toggleKeys: () => void;
+  setMidiPort: (id: string) => void;
+  setClockFollow: (on: boolean) => void;
+  setDawOpen: (on: boolean) => void;
   hydrate: () => void;
 };
 
@@ -64,6 +99,7 @@ function hookMidi(engine: LyraEngine) {
   if (midiQueued) return;
   midiQueued = true;
   window.setTimeout(() => {
+    setMidiPortFilter(useSynth.getState().midiPortId);
     void connectMidi({
       noteOn: (n, v) => useSynth.getState().noteOn(n, v),
       noteOff: (n) => useSynth.getState().noteOff(n),
@@ -77,6 +113,14 @@ function hookMidi(engine: LyraEngine) {
       },
       pitchBend: (semis) => engine.setBend(semis),
       onStatus: (status, name) => useSynth.setState({ midiStatus: status, midiName: name }),
+      onPorts: (ports) => useSynth.setState({ midiPorts: ports }),
+      onClock: ({ bpm, running }) => {
+        const s = useSynth.getState();
+        const rounded = bpm != null ? Math.round(bpm) : null;
+        if (s.clockBpm === rounded && s.clockRunning === running) return;
+        useSynth.setState({ clockBpm: rounded, clockRunning: running });
+        if (s.clockFollow) s.engine?.setHostTempo(running ? rounded : s.clockBpm);
+      },
     }).then((unsub) => {
       midiUnsub = unsub;
     });
@@ -124,10 +168,17 @@ export const useSynth = create<State>((set, get) => ({
   patch: clonePatch(INIT_PATCH),
   factory: FACTORY,
   userPatches: loadUser(),
+  favorites: loadFavs(),
   armed: false,
   ctxState: "none",
   midiStatus: "idle",
   midiName: null,
+  midiPorts: [],
+  midiPortId: "all",
+  clockBpm: null,
+  clockRunning: false,
+  clockFollow: false,
+  dawOpen: false,
   voices: 0,
   octave: 0,
   activeNotes: [],
@@ -162,10 +213,28 @@ export const useSynth = create<State>((set, get) => ({
     set({ userPatches, patch: p });
   },
 
+  renameUserPatch: (id, name) => {
+    const next = name.trim();
+    if (!next) return;
+    const userPatches = get().userPatches.map((p) => (p.id === id ? clonePatch(p, { name: next }) : p));
+    saveUser(userPatches);
+    const patch = get().patch.id === id ? clonePatch(get().patch, { name: next }) : get().patch;
+    set({ userPatches, patch });
+  },
+
   deleteUserPatch: (id) => {
     const userPatches = get().userPatches.filter((p) => p.id !== id);
+    const favorites = get().favorites.filter((x) => x !== id);
     saveUser(userPatches);
-    set({ userPatches });
+    saveFavs(favorites);
+    set({ userPatches, favorites });
+  },
+
+  toggleFavorite: (id) => {
+    const cur = get().favorites;
+    const favorites = cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id];
+    saveFavs(favorites);
+    set({ favorites });
   },
 
   noteOn: (midi, vel = 0.85) => {
@@ -207,14 +276,43 @@ export const useSynth = create<State>((set, get) => ({
     set({ showKeys: next });
   },
 
-  hydrate: () => {
-    let showKeys = true;
+  setMidiPort: (id) => {
+    const midiPortId = id || "all";
     try {
-      showKeys = localStorage.getItem(KEYS_KEY) !== "0";
+      localStorage.setItem(PORT_KEY, midiPortId);
     } catch {
       /* */
     }
-    set({ userPatches: loadUser(), showKeys });
+    setMidiPortFilter(midiPortId);
+    set({ midiPortId });
+  },
+
+  setClockFollow: (on) => {
+    try {
+      localStorage.setItem(CLOCK_KEY, on ? "1" : "0");
+    } catch {
+      /* */
+    }
+    set({ clockFollow: on });
+    const s = get();
+    s.engine?.setHostTempo(on ? s.clockBpm : null);
+  },
+
+  setDawOpen: (on) => set({ dawOpen: on }),
+
+  hydrate: () => {
+    let showKeys = true;
+    let midiPortId = "all";
+    let clockFollow = false;
+    try {
+      showKeys = localStorage.getItem(KEYS_KEY) !== "0";
+      midiPortId = localStorage.getItem(PORT_KEY) || "all";
+      clockFollow = localStorage.getItem(CLOCK_KEY) === "1";
+    } catch {
+      /* */
+    }
+    setMidiPortFilter(midiPortId);
+    set({ userPatches: loadUser(), favorites: loadFavs(), showKeys, midiPortId, clockFollow });
   },
 }));
 
@@ -238,6 +336,10 @@ export function bindComputerKeyboard() {
       return;
     }
     if (k === "escape") {
+      if (useSynth.getState().dawOpen) {
+        useSynth.getState().setDawOpen(false);
+        return;
+      }
       useSynth.getState().panic();
       return;
     }

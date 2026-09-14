@@ -1,8 +1,16 @@
-# LYRA-32 Mk II
+# LYRA-32 Mk III
 
 Hybrid polyphonic web synthesizer by [Raybridge Digital](https://github.com/raybridgedigital).
 
 Play from a class-compliant USB-C MIDI keyboard, the computer keys (A–L), or the on-screen piano. Chrome / Edge / Firefox.
+
+## Mk III (v3)
+
+- DAW mode: IAC port picker, MIDI clock follow, Ableton / Logic setup
+- Favorites and user-named patches
+- Yamaha-style legato
+- Faceplate polish for 15-inch screens (header, matrix, knobs)
+- 161 factory patches in banks (incl. Techno, Strings, Drums)
 
 ## Mk II
 
@@ -13,8 +21,7 @@ Play from a class-compliant USB-C MIDI keyboard, the computer keys (A–L), or t
 - FX rack: chorus, delay, reverb, phaser
 - 32-voice polyphony
 - Hide the on-screen keyboard for hardware MIDI (M-Audio etc.)
-- Three-column panel layout
-- 145 factory patches in banks (incl. Techno)
+- Four-column panel layout
 
 ## Run
 

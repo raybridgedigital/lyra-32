@@ -121,7 +121,7 @@ function makeAudioContext(): AudioContext {
 type LfoBank = { lfo1: OscillatorNode; lfo2: OscillatorNode; drift: OscillatorNode };
 
 class Voice {
-  readonly midi: number;
+  midi: number;
   readonly startedAt: number;
   releasing = false;
   private ctx: AudioContext;
@@ -130,6 +130,7 @@ class Voice {
   private oscs: OscillatorNode[] = [];
   private osc1s: OscillatorNode[] = [];
   private osc2s: OscillatorNode[] = [];
+  private subs: OscillatorNode[] = [];
   private sources: AudioScheduledSourceNode[] = [];
   private mix: GainNode;
   private pan: StereoPannerNode;
@@ -212,6 +213,7 @@ class Voice {
       g.connect(this.mix);
       sub.start(now);
       this.oscs.push(sub);
+      this.subs.push(sub);
       this.sources.push(sub);
     }
 
@@ -388,14 +390,26 @@ class Voice {
     }
   }
 
-  glideTo(midi: number, bend: number, patch: Patch, when: number) {
-    const t = Math.max(0.02, patch.glide * 2);
+  glideTo(midi: number, bend: number, patch: Patch, when: number, portamento: boolean) {
+    this.midi = midi;
+    const glide = patch.glide ?? 0;
+    const usePorta = portamento && glide > 0.01;
+    const dur = usePorta ? Math.max(0.03, glide * 1.15) : 0.006;
     const retune = (o: OscillatorNode, note: number, fine: number) => {
       const f = midiToFreq(note, bend) * Math.pow(2, fine / 1200);
-      o.frequency.setTargetAtTime(f, when, t / 3);
+      if (!Number.isFinite(f)) return;
+      try {
+        o.frequency.cancelAndHoldAtTime(when);
+      } catch {
+        o.frequency.cancelScheduledValues(when);
+        o.frequency.setValueAtTime(o.frequency.value, when);
+      }
+      if (usePorta) o.frequency.linearRampToValueAtTime(f, when + dur);
+      else o.frequency.setValueAtTime(f, when);
     };
     for (const o of this.osc1s) retune(o, midi + patch.osc1.octave * 12 + patch.osc1.semitone, patch.osc1.fine);
     for (const o of this.osc2s) retune(o, midi + patch.osc2.octave * 12 + patch.osc2.semitone, patch.osc2.fine);
+    for (const o of this.subs) retune(o, midi + patch.osc1.octave * 12 - 12, 0);
   }
 
   release(patch: Patch) {
@@ -419,6 +433,10 @@ class Voice {
         /* already */
       }
     }
+  }
+
+  get live() {
+    return !this.dead && !this.releasing;
   }
 
   kill() {
@@ -515,8 +533,10 @@ export class LyraEngine {
   private arpDir = 1;
   private arpVoice: Voice | null = null;
   private monoVoice: Voice | null = null;
+  private monoStack: number[] = [];
   private listener: EngineListener;
   private started = false;
+  private hostBpm: number | null = null;
 
   constructor(ctx: AudioContext, listener: EngineListener = {}) {
     this.ctx = ctx;
@@ -673,6 +693,7 @@ export class LyraEngine {
     }
     if (this.patch.arp.on) this.ensureArp();
     else this.stopArp();
+    if (this.patch.polyMode === "poly") this.monoStack = [];
   }
 
   setCutoffMod(v: number) {
@@ -683,6 +704,10 @@ export class LyraEngine {
       const hz = cutoffHz(this.patch.filter.cutoff + this.cutoffMod * 0.4, this.patch.filter.keyTrack, vo.midi);
       vo.setCutoff(hz, q, now);
     }
+  }
+
+  setHostTempo(bpm: number | null) {
+    this.hostBpm = bpm != null && bpm >= 40 && bpm <= 300 ? bpm : null;
   }
 
   setMaster(v: number) {
@@ -701,6 +726,7 @@ export class LyraEngine {
         this.sustained.delete(n);
         if (!this.held.has(n)) this.releaseNote(n);
       }
+      if (this.patch.polyMode !== "poly" && this.monoStack.length === 0) this.monoVoice?.release(this.patch);
     }
   }
 
@@ -713,26 +739,43 @@ export class LyraEngine {
       return;
     }
     const now = this.ctx.currentTime;
-    if (this.patch.polyMode !== "poly") {
-      if (this.monoVoice && !this.monoVoice.releasing && this.patch.polyMode === "legato") {
-        this.monoVoice.glideTo(midi, this.bend, this.patch, now);
-        this.held.set(midi, this.monoVoice);
-        return;
-      }
-      if (this.monoVoice) this.monoVoice.release(this.patch);
+    if (this.patch.polyMode === "poly") {
+      this.spawn(midi, velocity, now);
+      return;
     }
+
+    this.monoStack = this.monoStack.filter((n) => n !== midi);
+    const overlapping = this.monoStack.length > 0 && !!this.monoVoice?.live;
+    this.monoStack.push(midi);
+
+    if (this.patch.polyMode === "legato" && overlapping && this.monoVoice) {
+      this.monoVoice.glideTo(midi, this.bend, this.patch, now, true);
+      this.held.set(midi, this.monoVoice);
+      return;
+    }
+
+    if (this.monoVoice?.live) this.monoVoice.release(this.patch);
     this.spawn(midi, velocity, now);
   }
 
   noteOff(midi: number) {
     this.arpHeld = this.arpHeld.filter((n) => n !== midi);
     this.held.delete(midi);
+    this.monoStack = this.monoStack.filter((n) => n !== midi);
     if (this.sustain) {
       this.sustained.add(midi);
       return;
     }
-    this.releaseNote(midi);
-    if (this.patch.arp.on && this.arpHeld.length === 0) this.stopArp();
+    if (this.patch.arp.on) {
+      this.releaseNote(midi);
+      if (this.arpHeld.length === 0) this.stopArp();
+      return;
+    }
+    if (this.patch.polyMode === "poly") {
+      this.releaseNote(midi);
+      return;
+    }
+    this.advanceMono();
   }
 
   panic() {
@@ -740,6 +783,7 @@ export class LyraEngine {
     this.voices = [];
     this.held.clear();
     this.sustained.clear();
+    this.monoStack = [];
     this.arpHeld = [];
     this.stopArp();
     this.monoVoice = null;
@@ -748,6 +792,22 @@ export class LyraEngine {
 
   resume() {
     kickContext(this.ctx);
+  }
+
+  private advanceMono() {
+    const now = this.ctx.currentTime;
+    const next = this.monoStack[this.monoStack.length - 1];
+    const live = this.monoVoice?.live ? this.monoVoice : null;
+    if (next != null && live) {
+      if (this.patch.polyMode === "legato") {
+        live.glideTo(next, this.bend, this.patch, now, true);
+        return;
+      }
+      live.release(this.patch);
+      this.spawn(next, 0.85, now);
+      return;
+    }
+    this.monoVoice?.release(this.patch);
   }
 
   private releaseNote(midi: number) {
@@ -817,7 +877,8 @@ export class LyraEngine {
     this.arpVoice = this.voices[this.voices.length - 1] ?? null;
     this.listener.onArpStep?.(this.arpIndex, note);
 
-    const step = (60 / this.patch.arp.tempo) * (ARP_DIV[this.patch.arp.rate] ?? 0.25);
+    const tempo = this.hostBpm ?? this.patch.arp.tempo;
+    const step = (60 / tempo) * (ARP_DIV[this.patch.arp.rate] ?? 0.25);
     const swing = this.arpIndex % 2 === 1 ? step * this.patch.arp.swing * 0.5 : 0;
     const gate = clamp(this.patch.arp.gate, 0.1, 0.95);
     window.setTimeout(() => {
