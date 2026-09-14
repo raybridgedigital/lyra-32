@@ -1,4 +1,4 @@
-# LYRA-32 Mk IV.3 — training manual
+# LYRA-32 Mk IV.4 — training manual
 
 Hybrid 32-voice web synthesizer by Ray Bridge Digital. Play it in Chrome, Edge, or Firefox. This is the full course — the in-app Help (**?**) is the same material in short form.
 
@@ -16,7 +16,7 @@ LYRA-32 is a flagship-style subtractive / hybrid instrument in the browser:
 - Ring, sync, FM, unison, drift, drive
 - Arpeggiator with Hold/Latch and a 16-step pattern
 - FX: delay, reverb, chorus, phaser
-- 166 factory patches, favorites, user saves
+- 171 factory patches, favorites, user saves
 - USB MIDI, computer keyboard, on-screen piano
 - DAW mode (Ableton / Logic via IAC MIDI clock)
 
@@ -286,4 +286,4 @@ Most oscillator/filter-type/matrix dest changes apply on the **next note**. Cuto
 4. Load **Techno Seq**. Lift your hands (Hold). Click pattern steps. Hit Panic.
 5. Mute, twist Cut, confirm silence, unmute.
 
-That is the instrument. Design from Init Dual Saw; steal ideas from the 166 factory patches.
+That is the instrument. Design from Init Dual Saw; steal ideas from the 171 factory patches.

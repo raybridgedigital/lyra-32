@@ -323,7 +323,7 @@ function StudioTab() {
       <H>Library</H>
       <Ul
         items={[
-          <>166 factory patches in Bass, Lead, Keys, Brass, Pad, Pluck, FX, Sequence, Drums, Strings, Techno, plus User.</>,
+          <>171 factory patches in Bass, Lead, Keys, Brass, Pad, Pluck, FX, Sequence, Drums, Strings, Techno, plus User.</>,
           <>Star a patch to drop it in Favorite. The header star is the same list.</>,
           <>Name this patch + Save writes a User copy in this browser (localStorage).</>,
           <>Pencil to rename a user patch, trash to delete. Factory names cannot be renamed.</>,
@@ -378,7 +378,7 @@ function AboutTab() {
     <>
       <H>LYRA-32</H>
       <P>
-        by Ray Bridge Digital · Mk IV.3 · Version 4.3. 32-voice hybrid synthesizer for Chrome, Edge, and Firefox. Dual
+        by Ray Bridge Digital · Mk IV.4 · Version 4.4. 32-voice hybrid synthesizer for Chrome, Edge, and Firefox. Dual
         oscillator + sub + noise, dual LFO, 4-slot matrix, FX rack, arpeggiator with 16-step pattern, two-layer stack /
         split, and a groovebox (4 MIDI takes + 8-lane drums). USB-C MIDI, computer keys, or the on-screen piano. Not a
         VST/AU — DAW mode uses IAC MIDI.
