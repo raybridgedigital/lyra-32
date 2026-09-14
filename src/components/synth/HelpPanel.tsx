@@ -275,6 +275,16 @@ function ArpTab() {
           <>Tap (header, next to the voice count) — hit it twice or more in time. Averages the last taps into BPM (60–180). DAW clock still wins while Clock is following.</>,
         ]}
       />
+      <H>Sequencer + drums</H>
+      <P>
+        Groove plate under Pattern. Clock is 4/4: 1 bar = 4 beats, 1 beat = 4 sixteenths. Length is 1–8 bars. Four note
+        tracks are MIDI takes — Rec / Wait capture whatever you play for the loop, like a vocal; C clears the whole take
+        (no per-16th delete). Each note track picks its own sound: Layer A, Layer B, or any patch from the bank. Drums
+        stay an 8-lane 16th grid (kick, snare, hats, clap, lo/hi tom, perc). M mutes anytime; R arms for rec. Save the
+        sequence under User — name it, rename, or delete, same as a patch. Factory Grooves land on track 1; Phrases load
+        into armed note tracks. C1–D#2 paint armed drum lanes while Rec is on (F1–D2 are the toms). Undo / Redo step
+        through rec takes, clears, and factory loads.
+      </P>
       <H>16-step pattern</H>
       <P>
         Pattern arms the arp and overlays a 16-step gate on top of the note order. Gold step = playhead. Click a step to cycle:
@@ -368,9 +378,10 @@ function AboutTab() {
     <>
       <H>LYRA-32</H>
       <P>
-        by Ray Bridge Digital · Mk IV.2 · Version 4.2. 32-voice hybrid synthesizer for Chrome, Edge, and Firefox. Dual
-        oscillator + sub + noise, dual LFO, 4-slot matrix, FX rack, arpeggiator with 16-step pattern, and two-layer stack
-        / split. USB-C MIDI, computer keys, or the on-screen piano. Not a VST/AU — DAW mode uses IAC MIDI.
+        by Ray Bridge Digital · Mk IV.3 · Version 4.3. 32-voice hybrid synthesizer for Chrome, Edge, and Firefox. Dual
+        oscillator + sub + noise, dual LFO, 4-slot matrix, FX rack, arpeggiator with 16-step pattern, two-layer stack /
+        split, and a groovebox (4 MIDI takes + 8-lane drums). USB-C MIDI, computer keys, or the on-screen piano. Not a
+        VST/AU — DAW mode uses IAC MIDI.
       </P>
       <div className="lyra-about-brand">
         <LayerBrand />

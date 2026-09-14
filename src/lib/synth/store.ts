@@ -4,8 +4,11 @@ import { FACTORY, INIT_PATCH, clonePatch } from "./patches";
 import { LyraEngine, createEngine } from "./engine";
 import { QWERTY_MAP, connectMidi, setMidiPortFilter, type MidiPortInfo } from "./midi";
 import { defaultMix } from "./stack";
+import { DRUM_MIDI, clearDrumLane as wipeDrumLane, clearNoteTrack as wipeNoteTrack, grooveOf, newClipId, normalizeGroove, patchClip, snapshotGroove, stepsOf, type DrumPart, type Groove, type RecMode, type UserSequence } from "./groove";
+import { applyBeat, applyGroovePreset, applyPhrase } from "./groove-factory";
 
 const USER_KEY = "lyra32-user-patches";
+const SEQ_KEY = "lyra32-user-sequences";
 const KEYS_KEY = "lyra32-show-keys";
 const PORT_KEY = "lyra32-midi-port";
 const CLOCK_KEY = "lyra32-clock-follow";
@@ -51,6 +54,32 @@ function saveFavs(ids: string[]) {
   }
 }
 
+function loadSeqs(): UserSequence[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(SEQ_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((x) => x && typeof x === "object" && typeof (x as UserSequence).id === "string")
+      .map((x) => {
+        const s = x as UserSequence;
+        return { id: s.id, name: String(s.name || "Sequence"), groove: normalizeGroove(s.groove) };
+      });
+  } catch {
+    return [];
+  }
+}
+
+function saveSeqs(list: UserSequence[]) {
+  try {
+    localStorage.setItem(SEQ_KEY, JSON.stringify(list));
+  } catch {
+    /* quota */
+  }
+}
+
 type State = {
   patch: Patch;
   layer: LayerId;
@@ -62,6 +91,7 @@ type State = {
   splitNote: number;
   factory: Patch[];
   userPatches: Patch[];
+  userSequences: UserSequence[];
   favorites: string[];
   armed: boolean;
   ctxState: AudioContextState | "none";
@@ -79,6 +109,12 @@ type State = {
   transpose: number;
   activeNotes: number[];
   arpStep: number;
+  grooveStep: number;
+  groovePlaying: boolean;
+  recMode: RecMode;
+  recStep: number;
+  grooveUndo: Groove[];
+  grooveRedo: Groove[];
   masterMute: boolean;
   showKeys: boolean;
   engine: LyraEngine | null;
@@ -89,6 +125,10 @@ type State = {
   renameUserPatch: (id: string, name: string) => void;
   deleteUserPatch: (id: string) => void;
   toggleFavorite: (id: string) => void;
+  saveUserSequence: (name: string) => void;
+  renameUserSequence: (id: string, name: string) => void;
+  deleteUserSequence: (id: string) => void;
+  loadUserSequence: (id: string) => void;
   noteOn: (midi: number, vel?: number) => void;
   noteOff: (midi: number) => void;
   shiftOctave: (d: number) => void;
@@ -106,11 +146,31 @@ type State = {
   setLayerPan: (id: LayerId, pan: number) => void;
   setStackMode: (mode: StackMode) => void;
   setSplitNote: (note: number) => void;
+  setGroove: (g: Groove) => void;
+  setGroovePlaying: (on: boolean) => void;
+  setRecMode: (mode: RecMode) => void;
+  undoGroove: () => void;
+  redoGroove: () => void;
+  loadPhrase: (id: string) => void;
+  loadBeat: (id: string) => void;
+  loadGroovePreset: (id: string) => void;
+  hitDrum: (part: DrumPart, vel?: number) => void;
+  clearNoteTrack: (track: number) => void;
+  clearDrumLane: (part: DrumPart) => void;
   hydrate: () => void;
 };
 
 function shareFx(from: Patch, onto: Patch): Patch {
-  return clonePatch(onto, { fx: from.fx, arp: from.arp, master: from.master });
+  return clonePatch(onto, { fx: from.fx, arp: from.arp, master: from.master, groove: from.groove });
+}
+
+function putGroove(get: () => State, set: (p: Partial<State>) => void, groove: Groove, snap = false) {
+  if (snap) pushUndo(get, set);
+  const s = get();
+  const patch = clonePatch(s.patch, { groove });
+  if (s.layer === "b") set({ patch, layerB: patch, layerA: shareFx(patch, s.layerA) });
+  else set({ patch, layerA: patch, layerB: shareFx(patch, s.layerB) });
+  pushEngine(get);
 }
 
 function pushEngine(get: () => State) {
@@ -122,11 +182,41 @@ function pushEngine(get: () => State) {
     b: { id: "b", on: s.mixB.on, level: s.mixB.level, pan: s.mixB.pan, patch: s.layerB },
   });
   s.engine?.applyPatch(s.patch);
+  s.engine?.setBank?.([...s.factory, ...s.userPatches]);
 }
 let midiUnsub: (() => void) | null = null;
 let midiQueued = false;
 const heldKeys = new Map<string, number>();
 const soundingByInput = new Map<number, number>();
+const recOpen = new Map<string, { track: number; id: string; start: number }>();
+let recDidSnap = false;
+const UNDO_MAX = 24;
+
+function pushUndo(get: () => State, set: (p: Partial<State>) => void) {
+  const cur = snapshotGroove(grooveOf(get().patch.groove));
+  const grooveUndo = [...get().grooveUndo, cur].slice(-UNDO_MAX);
+  set({ grooveUndo, grooveRedo: [] });
+}
+
+function recSnap(get: () => State, set: (p: Partial<State>) => void) {
+  if (recDidSnap) return;
+  pushUndo(get, set);
+  recDidSnap = true;
+}
+
+function recPos(): number {
+  const s = useSynth.getState();
+  if (s.engine && s.groovePlaying) return s.engine.groovePos();
+  return Math.max(0, s.grooveStep);
+}
+
+function recIndex(): number {
+  const s = useSynth.getState();
+  const g = grooveOf(s.patch.groove);
+  const len = Math.max(1, stepsOf(g));
+  const i = s.groovePlaying ? Math.floor(recPos()) : Math.max(0, s.grooveStep);
+  return ((i % len) + len) % len;
+}
 
 function blocksComputerKeys(t: EventTarget | null) {
   if (!t || !(t instanceof HTMLElement)) return false;
@@ -196,6 +286,7 @@ function bootEngine(): LyraEngine {
   const engine = createEngine({
     onVoices: (n) => useSynth.setState({ voices: n }),
     onArpStep: (step) => useSynth.setState({ arpStep: step }),
+    onGrooveStep: (step) => useSynth.setState({ grooveStep: step }),
     onState: (ctxState) => useSynth.setState({ ctxState, armed: ctxState === "running" || useSynth.getState().armed }),
   });
   engine.applyPatch(useSynth.getState().patch);
@@ -222,6 +313,7 @@ export const useSynth = create<State>((set, get) => ({
   splitNote: 60,
   factory: FACTORY,
   userPatches: loadUser(),
+  userSequences: loadSeqs(),
   favorites: loadFavs(),
   armed: false,
   ctxState: "none",
@@ -239,6 +331,12 @@ export const useSynth = create<State>((set, get) => ({
   transpose: 0,
   activeNotes: [],
   arpStep: -1,
+  grooveStep: -1,
+  groovePlaying: false,
+  recMode: "off",
+  recStep: 0,
+  grooveUndo: [],
+  grooveRedo: [],
   masterMute: false,
   showKeys: typeof window === "undefined" ? true : localStorage.getItem(KEYS_KEY) !== "0",
   engine: null,
@@ -336,22 +434,76 @@ export const useSynth = create<State>((set, get) => ({
 
   noteOn: (midi, vel = 0.85) => {
     const engine = bootEngine();
-    const sounded = clampInt(midi + get().octave * 12 + get().transpose, 0, 127);
-    soundingByInput.set(midi, sounded);
-    try {
-      engine.noteOn(sounded, vel);
-    } catch (err) {
-      console.error("lyra noteOn", err);
+    const s0 = get();
+    const sounded = clampInt(midi + s0.octave * 12 + s0.transpose, 0, 127);
+    const rec = s0.recMode;
+    const g = grooveOf(s0.patch.groove);
+    const mapped = DRUM_MIDI[midi];
+    const drumPart = rec !== "off" && g.drumsOn && mapped && g.drumArm[mapped] ? mapped : undefined;
+
+    if (rec !== "off" && (g.seqOn || g.drumsOn)) {
+      if (rec === "wait") {
+        engine.setGroovePlaying(true);
+        set({ groovePlaying: true, recMode: "live" });
+      }
+      recSnap(get, set);
+      if (drumPart) {
+        const groove = snapshotGroove(grooveOf(get().patch.groove));
+        const idx = recIndex();
+        const lane = groove.drums[drumPart].slice();
+        lane[idx] = { on: true, vel };
+        groove.drums = { ...groove.drums, [drumPart]: lane };
+        engine.hitDrum(drumPart, vel);
+        putGroove(get, set, groove);
+      } else if (g.seqOn) {
+        const pos = recPos();
+        const groove = snapshotGroove(grooveOf(get().patch.groove));
+        groove.tracks = groove.tracks.map((clips, t) => {
+          if (!groove.arm[t]) return clips;
+          const id = newClipId();
+          recOpen.set(`${t}:${sounded}`, { track: t, id, start: pos });
+          return [...clips, { id, note: sounded, vel, start: pos, dur: 0.25 }];
+        });
+        putGroove(get, set, groove);
+      }
     }
-    const { activeNotes } = get();
-    if (!activeNotes.includes(sounded)) set({ activeNotes: [...activeNotes, sounded] });
+
+    if (!drumPart) {
+      soundingByInput.set(midi, sounded);
+      try {
+        engine.noteOn(sounded, vel);
+      } catch (err) {
+        console.error("lyra noteOn", err);
+      }
+      const { activeNotes } = get();
+      if (!activeNotes.includes(sounded)) set({ activeNotes: [...activeNotes, sounded] });
+    }
   },
 
   noteOff: (midi) => {
+    const had = soundingByInput.has(midi);
     const sounded = soundingByInput.get(midi) ?? clampInt(midi + get().octave * 12 + get().transpose, 0, 127);
     soundingByInput.delete(midi);
+    const s = get();
+    const g = grooveOf(s.patch.groove);
+    if (had && s.recMode !== "off" && g.seqOn) {
+      const pos = recPos();
+      const len = Math.max(1, stepsOf(g));
+      let groove = snapshotGroove(g);
+      let changed = false;
+      for (let t = 0; t < 4; t++) {
+        const open = recOpen.get(`${t}:${sounded}`);
+        if (!open) continue;
+        recOpen.delete(`${t}:${sounded}`);
+        let dur = pos - open.start;
+        if (dur < 0) dur += len;
+        groove = patchClip(groove, t, open.id, { dur: Math.max(0.08, dur) });
+        changed = true;
+      }
+      if (changed) putGroove(get, set, groove);
+    }
     get().engine?.noteOff(sounded);
-    set({ activeNotes: get().activeNotes.filter((n) => n !== sounded) });
+    set({ activeNotes: s.activeNotes.filter((n) => n !== sounded) });
   },
 
   shiftOctave: (d) => set({ octave: clampInt(get().octave + d, -3, 4) }),
@@ -360,7 +512,8 @@ export const useSynth = create<State>((set, get) => ({
   panic: () => {
     get().engine?.panic();
     soundingByInput.clear();
-    set({ activeNotes: [] });
+    recOpen.clear();
+    set({ activeNotes: [], groovePlaying: false, recMode: "off", grooveStep: -1 });
   },
 
   toggleMute: () => {
@@ -439,6 +592,120 @@ export const useSynth = create<State>((set, get) => ({
     pushEngine(get);
   },
 
+  setGroove: (g) => putGroove(get, set, g),
+
+  setGroovePlaying: (on) => {
+    const engine = bootEngine();
+    if (on) {
+      const g = grooveOf(get().patch.groove);
+      if (!g.seqOn && !g.drumsOn) putGroove(get, set, { ...g, seqOn: true, drumsOn: true });
+    }
+    engine.setGroovePlaying(on);
+    if (!on) recOpen.clear();
+    set({ groovePlaying: on, grooveStep: on ? 0 : -1 });
+  },
+
+  setRecMode: (mode) => {
+    const s = get();
+    if (mode === "off") {
+      recOpen.clear();
+      recDidSnap = false;
+    }
+    if (mode !== "off") {
+      const g = grooveOf(s.patch.groove);
+      if (!g.seqOn && !g.drumsOn) putGroove(get, set, { ...g, seqOn: true, drumsOn: true });
+    }
+    set({ recMode: mode });
+    if (mode === "live" && !get().groovePlaying) {
+      bootEngine().setGroovePlaying(true);
+      set({ groovePlaying: true });
+    }
+  },
+
+  undoGroove: () => {
+    const s = get();
+    if (!s.grooveUndo.length) return;
+    const prev = s.grooveUndo[s.grooveUndo.length - 1]!;
+    const grooveUndo = s.grooveUndo.slice(0, -1);
+    const cur = snapshotGroove(grooveOf(s.patch.groove));
+    recOpen.clear();
+    recDidSnap = false;
+    putGroove(get, set, prev);
+    set({ grooveUndo, grooveRedo: [...s.grooveRedo, cur].slice(-UNDO_MAX), recMode: "off" });
+  },
+
+  redoGroove: () => {
+    const s = get();
+    if (!s.grooveRedo.length) return;
+    const next = s.grooveRedo[s.grooveRedo.length - 1]!;
+    const grooveRedo = s.grooveRedo.slice(0, -1);
+    const cur = snapshotGroove(grooveOf(s.patch.groove));
+    recOpen.clear();
+    recDidSnap = false;
+    putGroove(get, set, next);
+    set({ grooveUndo: [...s.grooveUndo, cur].slice(-UNDO_MAX), grooveRedo, recMode: "off" });
+  },
+
+  loadPhrase: (id) => putGroove(get, set, applyPhrase(grooveOf(get().patch.groove), id), true),
+  loadBeat: (id) => putGroove(get, set, applyBeat(grooveOf(get().patch.groove), id), true),
+  loadGroovePreset: (id) => {
+    putGroove(get, set, applyGroovePreset(id, grooveOf(get().patch.groove)), true);
+  },
+
+  hitDrum: (part, vel = 0.88) => {
+    const engine = bootEngine();
+    const s = get();
+    const g = grooveOf(s.patch.groove);
+    if (!g.drumMute[part]) engine.hitDrum(part, vel);
+    if (s.recMode === "off" || !g.drumsOn || !g.drumArm[part]) return;
+    if (s.recMode === "wait") {
+      engine.setGroovePlaying(true);
+      set({ groovePlaying: true, recMode: "live" });
+    }
+    const idx = recIndex();
+    recSnap(get, set);
+    const groove = snapshotGroove(g);
+    const lane = groove.drums[part].slice();
+    lane[idx] = { on: true, vel };
+    groove.drums = { ...groove.drums, [part]: lane };
+    putGroove(get, set, groove);
+  },
+
+  clearNoteTrack: (track) => putGroove(get, set, wipeNoteTrack(grooveOf(get().patch.groove), track), true),
+  clearDrumLane: (part) => putGroove(get, set, wipeDrumLane(grooveOf(get().patch.groove), part), true),
+
+  saveUserSequence: (name) => {
+    const groove = snapshotGroove(grooveOf(get().patch.groove));
+    const item: UserSequence = {
+      id: `seq-${Date.now()}`,
+      name: name.trim() || "Sequence",
+      groove,
+    };
+    const userSequences = [...get().userSequences, item];
+    saveSeqs(userSequences);
+    set({ userSequences });
+  },
+
+  renameUserSequence: (id, name) => {
+    const next = name.trim();
+    if (!next) return;
+    const userSequences = get().userSequences.map((x) => (x.id === id ? { ...x, name: next } : x));
+    saveSeqs(userSequences);
+    set({ userSequences });
+  },
+
+  deleteUserSequence: (id) => {
+    const userSequences = get().userSequences.filter((x) => x.id !== id);
+    saveSeqs(userSequences);
+    set({ userSequences });
+  },
+
+  loadUserSequence: (id) => {
+    const found = get().userSequences.find((x) => x.id === id);
+    if (!found) return;
+    putGroove(get, set, snapshotGroove(found.groove), true);
+  },
+
   hydrate: () => {
     let showKeys = true;
     let midiPortId = "all";
@@ -451,7 +718,14 @@ export const useSynth = create<State>((set, get) => ({
       /* */
     }
     setMidiPortFilter(midiPortId);
-    set({ userPatches: loadUser(), favorites: loadFavs(), showKeys, midiPortId, clockFollow });
+    set({
+      userPatches: loadUser(),
+      userSequences: loadSeqs(),
+      favorites: loadFavs(),
+      showKeys,
+      midiPortId,
+      clockFollow,
+    });
   },
 }));
 

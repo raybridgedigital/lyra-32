@@ -524,6 +524,356 @@
     color: var(--color-fg);
   }
 
+  .lyra-groove {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+    margin-top: 6px;
+    padding: 8px 10px 10px;
+    border-radius: var(--radius-xl);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-panel);
+    position: relative;
+    z-index: 10;
+  }
+
+  .lyra-groove-transport {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem;
+  }
+
+  .lyra-seq-toggle:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .lyra-step-note {
+    height: 3.15rem;
+  }
+
+  .lyra-groove-row {
+    display: flex;
+    align-items: stretch;
+    gap: 0.5rem;
+    min-width: 0;
+  }
+
+  .lyra-groove-k {
+    flex: 0 0 8.8rem;
+    display: grid;
+    place-items: center;
+    border-radius: 6px;
+    background: var(--color-elevated);
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-muted);
+  }
+
+  .lyra-trk {
+    flex: 0 0 8.8rem;
+    display: grid;
+    grid-template-columns: 1.25rem minmax(0, 1fr) 1.25rem 1.25rem;
+    align-items: stretch;
+    gap: 2px;
+    min-height: 2.75rem;
+  }
+
+  .lyra-trk.is-seq {
+    grid-template-rows: minmax(1.7rem, auto) 1.35rem;
+    min-height: 3.15rem;
+  }
+
+  .lyra-trk-sound {
+    grid-column: 1 / -1;
+    min-width: 0;
+    height: 1.35rem;
+    border: 0;
+    border-radius: 5px;
+    background: var(--color-elevated);
+    color: var(--color-fg);
+    font-size: 0.62rem;
+    font-weight: 700;
+    padding: 0 4px;
+  }
+
+  .lyra-trk-btn,
+  .lyra-trk-name {
+    display: grid;
+    place-items: center;
+    border-radius: 5px;
+    background: var(--color-elevated);
+    font-size: 0.62rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    color: var(--color-muted);
+  }
+
+  .lyra-trk-name {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    color: var(--color-fg);
+    min-width: 0;
+    padding: 0 1px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  button.lyra-trk-name.is-pad:hover {
+    color: var(--color-accent-fg);
+    background: var(--color-accent);
+  }
+
+  .lyra-trk-btn.is-m.is-on {
+    color: #fff;
+    background: color-mix(in srgb, #9a3b3b 82%, var(--color-fg));
+  }
+
+  .lyra-trk-btn.is-r.is-on {
+    color: var(--color-accent-fg);
+    background: var(--color-accent);
+  }
+
+  .lyra-trk-btn.is-c:hover {
+    color: var(--color-fg);
+    background: color-mix(in srgb, var(--color-fg) 16%, var(--color-elevated));
+  }
+
+  .lyra-step.is-tie {
+    box-shadow: inset 0 -3px 0 var(--color-accent);
+  }
+
+  .lyra-groove-row.is-muted .lyra-steps,
+  .lyra-groove-row.is-muted .lyra-clip,
+  .lyra-trk.is-muted .lyra-trk-name {
+    opacity: 0.38;
+  }
+
+  .lyra-groove-k.is-pad {
+    color: var(--color-fg);
+  }
+
+  button.lyra-groove-k.is-pad:hover {
+    color: var(--color-accent-fg);
+    background: var(--color-accent);
+  }
+
+  .lyra-groove-drums {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .lyra-groove-k.is-arm {
+    color: var(--color-accent-fg);
+    background: var(--color-accent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-fg) 35%, transparent);
+  }
+
+  .lyra-groove-bars,
+  .lyra-groove-beats,
+  .lyra-groove-ticks {
+    margin-top: 0.05rem;
+  }
+
+  .lyra-bar-h {
+    display: grid;
+    place-items: center start;
+    height: 1.15rem;
+    padding-left: 0.15rem;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    font-weight: 800;
+    color: var(--color-subtle);
+  }
+
+  .lyra-bar-h.is-start {
+    color: var(--color-fg);
+  }
+
+  .lyra-bar-h.is-live {
+    color: var(--color-accent);
+  }
+
+  .lyra-beat-h {
+    display: grid;
+    place-items: center;
+    height: 1.35rem;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--color-subtle);
+  }
+
+  .lyra-beat-h.is-down {
+    color: var(--color-fg);
+    font-weight: 800;
+  }
+
+  .lyra-beat-h.is-live {
+    color: var(--color-accent);
+    box-shadow: inset 0 -2px 0 var(--color-accent);
+  }
+
+  .lyra-tick-h {
+    display: grid;
+    place-items: center;
+    height: 1.05rem;
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    font-weight: 600;
+    color: var(--color-subtle);
+  }
+
+  .lyra-tick-h.is-live {
+    color: var(--color-accent);
+    font-weight: 800;
+  }
+
+  .lyra-clip {
+    position: relative;
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 3.15rem;
+    overflow: hidden;
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--color-elevated) 88%, transparent);
+    box-shadow: inset 0 0 0 1px var(--color-border);
+  }
+
+  .lyra-clip.is-armed {
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 45%, transparent);
+  }
+
+  .lyra-clip-cols {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    grid-template-columns: repeat(16, minmax(0, 1fr));
+    pointer-events: none;
+  }
+
+  .lyra-clip-col {
+    border-right: 1px solid color-mix(in srgb, var(--color-fg) 8%, transparent);
+  }
+
+  .lyra-clip-col.is-beat {
+    border-left: 1px solid color-mix(in srgb, var(--color-fg) 18%, transparent);
+  }
+
+  .lyra-clip-col.is-live {
+    background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+  }
+
+  .lyra-clip-note {
+    position: absolute;
+    height: 0.72rem;
+    border-radius: 3px;
+    background: color-mix(in srgb, var(--color-accent) 72%, transparent);
+    border: 1px solid color-mix(in srgb, var(--color-accent) 90%, var(--color-fg));
+    font-family: var(--font-mono);
+    font-size: 0.58rem;
+    font-weight: 700;
+    line-height: 0.7rem;
+    color: var(--color-accent-fg);
+    padding: 0 3px;
+    overflow: hidden;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+
+  .lyra-clip-empty {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    font-size: 0.68rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-subtle);
+    pointer-events: none;
+  }
+
+  .lyra-clip-head {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: var(--color-accent);
+    pointer-events: none;
+    z-index: 2;
+  }
+
+  .lyra-groove-scroll {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    padding: 0.15rem 0 0.1rem;
+  }
+
+  .lyra-groove-scroll-lab {
+    flex: 0 0 auto;
+    min-width: 5.8rem;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: var(--color-fg);
+  }
+
+  .lyra-groove-scroll-lab.is-end {
+    min-width: 1.6rem;
+    text-align: right;
+    color: var(--color-muted);
+  }
+
+  .lyra-groove-slider {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 0.45rem;
+    appearance: none;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--color-fg) 16%, var(--color-elevated));
+    outline: none;
+  }
+
+  .lyra-groove-slider::-webkit-slider-thumb {
+    appearance: none;
+    width: 1.05rem;
+    height: 1.05rem;
+    border-radius: 999px;
+    background: var(--color-accent);
+    border: 2px solid var(--color-fg);
+    cursor: pointer;
+  }
+
+  .lyra-groove-slider::-moz-range-thumb {
+    width: 1.05rem;
+    height: 1.05rem;
+    border-radius: 999px;
+    background: var(--color-accent);
+    border: 2px solid var(--color-fg);
+    cursor: pointer;
+  }
+
+  .lyra-step.is-armed-cell {
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 45%, transparent);
+  }
+
+  .lyra-step-note .lyra-step-mark {
+    font-size: 0.62rem;
+  }
+
+  .lyra-groove-lib {
+    margin-top: 0.25rem;
+    padding-top: 0.45rem;
+    border-top: 1px solid var(--color-border);
+  }
+
   .lyra-cell {
     display: flex;
     height: 100%;

@@ -16,6 +16,7 @@ import { cn } from "@/lib/cn";
 import { clonePatch, groupByCategory } from "@/lib/synth/patches";
 import { bindAudioUnlock, bindComputerKeyboard, useSynth } from "@/lib/synth/store";
 import { tapTempo } from "@/lib/synth/tap-tempo";
+import { midiBadgeLabel } from "@/lib/synth/midi";
 import type {
   ArpMode,
   ArpRate,
@@ -36,6 +37,7 @@ import { DawPanel } from "./DawPanel";
 import { HelpPanel } from "./HelpPanel";
 import { LayerStrip } from "./LayerStrip";
 import { PatternBar } from "./PatternBar";
+import { GrooveBar } from "./GrooveBar";
 import { AmtFader, Knob, LfoSlider, Seg } from "./Knob";
 import { Scope } from "./Scope";
 
@@ -670,6 +672,7 @@ export function SynthApp() {
         </div>
 
         <PatternBar patch={p} playhead={arpStep} onChange={update} />
+        <GrooveBar />
 
         <section className="lyra-lib mt-3 rounded-xl bg-surface p-4">
           <h2 className="lyra-cell-title">Library · {factory.length} factory</h2>
@@ -912,9 +915,11 @@ function BpmReadout({ tempo }: { tempo: number }) {
 }
 
 function MidiBadge({ status, name }: { status: string; name: string | null }) {
+  const raw = name?.trim() || "MIDI";
+  const parts = raw.split(/\s*[·|,;/]\s*/).map((s) => s.trim()).filter(Boolean);
   const label =
     status === "ok"
-      ? name ?? "MIDI"
+      ? midiBadgeLabel(parts.length ? parts : [raw])
       : status === "unsupported"
         ? "No MIDI"
         : status === "denied"
@@ -925,13 +930,13 @@ function MidiBadge({ status, name }: { status: string; name: string | null }) {
   return (
     <div
       className={cn(
-        "lyra-midi-name flex max-w-none shrink-0 items-center gap-1.5 whitespace-nowrap font-semibold",
+        "lyra-midi-name flex min-w-0 max-w-[min(42vw,26rem)] items-center gap-1.5 font-semibold",
         status === "ok" ? "text-accent" : "text-muted",
       )}
       title={label}
     >
       <Usb className="size-4 shrink-0" />
-      <span>{label}</span>
+      <span className="truncate">{label}</span>
       <span className={cn("size-1.5 shrink-0 rounded-full", status === "ok" ? "bg-accent" : "bg-subtle")} />
     </div>
   );

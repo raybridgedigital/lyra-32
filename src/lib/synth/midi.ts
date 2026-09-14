@@ -67,6 +67,38 @@ export function isIacPort(name: string): boolean {
   return /iac/i.test(name);
 }
 
+export function uniqueMidiNames(names: string[]): string[] {
+  const cleaned = names.map((n) => n.replace(/\s+/g, " ").trim()).filter(Boolean);
+  const exact: string[] = [];
+  const seen = new Set<string>();
+  for (const n of cleaned) {
+    const k = n.toLowerCase();
+    if (seen.has(k)) continue;
+    seen.add(k);
+    exact.push(n);
+  }
+  const collapsed: string[] = [];
+  for (const n of exact) {
+    const low = n.toLowerCase();
+    const hit = collapsed.findIndex((o) => {
+      const ol = o.toLowerCase();
+      return low === ol || low.startsWith(`${ol} `) || ol.startsWith(`${low} `);
+    });
+    if (hit < 0) collapsed.push(n);
+    else if (n.length > collapsed[hit]!.length) collapsed[hit] = n;
+  }
+  return collapsed;
+}
+
+export function midiBadgeLabel(names: string[]): string {
+  const unique = uniqueMidiNames(names);
+  const hw = unique.filter((n) => !isIacPort(n));
+  const show = hw.length ? hw : unique;
+  if (!show.length) return "MIDI";
+  if (show.length === 1) return show[0]!;
+  return `${show[0]} +${show.length - 1}`;
+}
+
 export function sortMidiPorts(ports: MidiPortInfo[]): MidiPortInfo[] {
   return [...ports].sort((a, b) => {
     const ia = isIacPort(a.name) ? 0 : 1;
@@ -154,7 +186,7 @@ function attachInputs(access: MidiAccessLike, handlers: MidiHandlers) {
   const active =
     selectedPortId !== PORT_ALL ? inputs.filter((i) => i.id === selectedPortId) : inputs;
   const listen = active.length ? active : inputs;
-  const label = listen.map((i) => i.name ?? "MIDI").join(" · ");
+  const label = midiBadgeLabel(listen.map((i) => i.name ?? "MIDI"));
   handlers.onStatus("ok", label);
   for (const input of inputs) {
     const take = selectedPortId === PORT_ALL || input.id === selectedPortId;

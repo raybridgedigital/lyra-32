@@ -1,10 +1,22 @@
-# LYRA-32 Mk IV.2
+# LYRA-32 Mk IV.3
 
 Hybrid polyphonic web synthesizer by [Raybridge Digital](https://github.com/raybridgedigital).
 
 Play from a class-compliant USB-C MIDI keyboard, the computer keys (A–L), or the on-screen piano. Chrome / Edge / Firefox.
 
-This tag is the restore point **before** the phrase sequencer / drums.
+This tag is the restore point **with** the groovebox (4 MIDI takes + 8-lane drums).
+
+## Mk IV.3 (v4.3)
+
+- Groove plate under Pattern: 4 note tracks as continuous MIDI takes, 8 drum lanes (kick, snare, hats, clap, lo/hi tom, perc)
+- Per-track sound (Layer A, Layer B, or any patch) — four different sounds at once
+- Mute / rec-arm anytime; C clears a whole take or drum lane
+- Length 1–8 bars; Bar / Beat / 16th headers; bar slider
+- Analog / Tight / Dust / Industrial kits
+- Undo / Redo stacks (rec, clears, factory loads)
+- User sequences: save, rename, delete (same as patches)
+- Factory grooves, phrases, 40 beats
+- Restore: `git checkout v4.3.0`
 
 ## Mk IV.2 (v4.2)
 

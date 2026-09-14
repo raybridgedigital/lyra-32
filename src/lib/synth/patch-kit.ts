@@ -1,5 +1,6 @@
 import type { LfoParams, ModRoute, OscParams, Patch } from "./types";
 import { defaultArpSteps, normalizeArpSteps } from "./arp";
+import { defaultGroove, normalizeGroove } from "./groove";
 
 export const osc = (over: Partial<OscParams> = {}): OscParams => ({
   wave: "sawtooth",
@@ -78,6 +79,7 @@ export function patch(partial: PatchIn): Patch {
       tempo: 120,
       steps: defaultArpSteps(),
     },
+    groove: defaultGroove(),
     ...rest,
     osc1: osc(o1),
     osc2: osc({
@@ -133,6 +135,7 @@ export function normalizePatch(p: Patch): Patch {
       tempo: Number.isFinite(p.arp?.tempo) ? p.arp.tempo : 120,
       steps: normalizeArpSteps(p.arp?.steps),
     },
+    groove: normalizeGroove(p.groove),
     stack: normalizeStackField(p.stack),
   };
 }
@@ -171,6 +174,7 @@ export function clonePatch(p: Patch, over: Partial<Patch> = {}): Patch {
       ...(over.arp ?? {}),
       steps: over.arp?.steps ?? p.arp?.steps,
     },
+    groove: normalizeGroove(over.groove ?? p.groove),
     matrix: over.matrix ?? p.matrix,
     ring: over.ring ?? p.ring,
     sync: over.sync ?? p.sync,

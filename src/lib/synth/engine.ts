@@ -3,6 +3,8 @@ import type { ArpStep } from "./arp";
 import { midiToFreq } from "./midi";
 import { INIT_PATCH, clonePatch } from "./patches";
 import { layersForNote, type EngineLayer, type EngineStack } from "./stack";
+import { DRUM_PARTS, defaultGroove, stepsOf, type DrumPart } from "./groove";
+import { DrumVoice } from "./drums";
 
 const MAX_VOICES = 32;
 const SUPERSAW_DETUNE = [-11, -7, -3, 0, 3, 7, 11];
@@ -102,6 +104,7 @@ const ARP_DIV: Record<string, number> = {
   "1/8t": 1 / 3,
   "1/16": 0.25,
   "1/16t": 1 / 6,
+  "1/32": 0.125,
 };
 
 /** Must run inside a user-gesture stack. Never await before this. */
@@ -158,7 +161,7 @@ class Voice {
   private bend: number;
   private fenv: ConstantSourceNode | null = null;
   private layerAmp: GainNode;
-  layer: "a" | "b";
+  layer: "a" | "b" | "seq";
 
   constructor(
     ctx: AudioContext,
@@ -171,7 +174,7 @@ class Voice {
     dc: DcBank,
     now: number,
     onEnded: () => void,
-    layer?: { id: "a" | "b"; gain: number; pan: number },
+    layer?: { id: "a" | "b" | "seq"; gain: number; pan: number },
   ) {
     this.ctx = ctx;
     this.midi = midi;
@@ -602,6 +605,7 @@ function applyWave(ctx: AudioContext, o: OscillatorNode, wave: Waveform, pwm: nu
 export type EngineListener = {
   onVoices?: (n: number) => void;
   onArpStep?: (step: number, note: number | null) => void;
+  onGrooveStep?: (step: number) => void;
   onState?: (state: AudioContextState) => void;
 };
 
@@ -626,6 +630,7 @@ export class LyraEngine {
     conv: ConvolverNode;
     revWet: GainNode;
     dry: GainNode;
+    drum: GainNode;
     master: GainNode;
     limiter: DynamicsCompressorNode;
     phaserGain: GainNode;
@@ -649,6 +654,16 @@ export class LyraEngine {
   private muted = false;
   private arpBag: number[] = [];
   private arpBagKey = "";
+  private grooveTimer: number | null = null;
+  private grooveIndex = 0;
+  private grooveNow = 0;
+  private grooveTickAt = 0;
+  private groovePlaying = false;
+  private seqVoices: Voice[] = [];
+  private seqByTrack: Voice[][] = [[], [], [], []];
+  private clipTimers: number[] = [];
+  private bank: Patch[] = [];
+  private drums: DrumVoice | null = null;
   private stack: EngineStack = {
     mode: "stack",
     splitNote: 60,
@@ -729,6 +744,12 @@ export class LyraEngine {
     analyser.fftSize = 2048;
     analyser.smoothingTimeConstant = 0.35;
 
+    const drum = ctx.createGain();
+    drum.gain.value = 0.95;
+    drum.connect(dry);
+    drum.connect(delay);
+    drum.connect(conv);
+
     voice.connect(dry);
     voice.connect(chorusDelay);
     chorusDelay.connect(chorusGain);
@@ -756,6 +777,7 @@ export class LyraEngine {
       conv,
       revWet,
       dry,
+      drum,
       master,
       limiter,
       phaserGain,
@@ -784,6 +806,7 @@ export class LyraEngine {
     at.start();
     this.dc = { mod, at };
 
+    this.drums = new DrumVoice(ctx, drum);
     this.started = true;
     this.applyPatch(this.patch);
     listener.onState?.(ctx.state);
@@ -832,6 +855,14 @@ export class LyraEngine {
       this.arpHeld = [...this.arpPhysical];
     }
     if (this.patch.polyMode === "poly") this.monoStack = [];
+    const g = this.patch.groove ?? defaultGroove();
+    if (this.groovePlaying && (g.seqOn || g.drumsOn)) this.ensureGroove();
+    else if (!g.seqOn && !g.drumsOn) this.stopGroove();
+    for (let t = 0; t < 4; t++) {
+      if (!g.mute[t]) continue;
+      for (const v of this.seqByTrack[t] ?? []) v.release(this.patch);
+      this.seqByTrack[t] = [];
+    }
   }
 
   setCutoffMod(v: number) {
@@ -867,10 +898,15 @@ export class LyraEngine {
     this.stack = next;
     const now = this.ctx.currentTime;
     for (const v of this.voices) {
+      if (v.layer === "seq") continue;
       const L = v.layer === "b" ? next.b : next.a;
       v.setMix(L.level, L.pan, now);
       if (!L.on && v.live) v.release(L.patch);
     }
+  }
+
+  setBank(list: Patch[]) {
+    this.bank = Array.isArray(list) ? list : [];
   }
 
   setBend(semis: number) {
@@ -977,6 +1013,7 @@ export class LyraEngine {
     this.arpHeld = [];
     this.arpPhysical.clear();
     this.stopArp();
+    this.stopGroove();
     this.monoVoice = null;
     this.arpVoices = [];
     this.dc.at.offset.setValueAtTime(0, this.ctx.currentTime);
@@ -1023,7 +1060,7 @@ export class LyraEngine {
     if (this.patch.polyMode !== "poly") this.monoVoice = v;
   }
 
-  private spawnOne(midi: number, velocity: number, now: number, L: EngineLayer) {
+  private spawnOne(midi: number, velocity: number, now: number, L: EngineLayer, mix: "a" | "b" | "seq" = L.id) {
     while (this.voices.length >= MAX_VOICES) {
       const oldest = this.voices[0];
       oldest?.kill();
@@ -1045,7 +1082,7 @@ export class LyraEngine {
         this.arpVoices = this.arpVoices.filter((x) => x !== v);
         this.listener.onVoices?.(this.voices.length);
       },
-      { id: L.id, gain: L.level, pan: L.pan },
+      { id: mix, gain: L.level, pan: L.pan },
     );
     this.voices.push(v);
     this.listener.onVoices?.(this.voices.length);
@@ -1147,6 +1184,132 @@ export class LyraEngine {
       if (this.arpIndex === 0) this.arpBag = [];
     }
     this.arpTimer = window.setTimeout(this.arpTick, (stepDur + swing) * 1000);
+  };
+
+  hitDrum(part: DrumPart, vel = 0.85) {
+    kickContext(this.ctx);
+    const g = this.patch.groove ?? defaultGroove();
+    if (g.drumMute[part]) return;
+    this.drums?.hit(part, vel, g.kit, this.ctx.currentTime);
+  }
+
+  setGroovePlaying(on: boolean) {
+    const g = this.patch.groove ?? defaultGroove();
+    this.groovePlaying = on;
+    if (on && (g.seqOn || g.drumsOn)) {
+      if (this.grooveTimer == null) this.grooveIndex = 0;
+      this.ensureGroove();
+    } else if (!on) {
+      this.stopGroove();
+    }
+  }
+
+  /** Playhead in 16th-notes (float). */
+  groovePos() {
+    const g = this.patch.groove ?? defaultGroove();
+    const len = Math.max(1, stepsOf(g));
+    if (!this.groovePlaying) return 0;
+    const tempo = this.hostBpm ?? this.patch.arp.tempo;
+    const stepDur = (60 / Math.max(40, tempo)) * 0.25;
+    const elapsed = Math.max(0, (performance.now() - this.grooveTickAt) / 1000);
+    return (this.grooveNow + Math.min(elapsed / Math.max(0.001, stepDur), 0.999)) % len;
+  }
+
+  private ensureGroove() {
+    if (this.grooveTimer != null) return;
+    this.grooveTick();
+  }
+
+  private clearClipTimers() {
+    for (const id of this.clipTimers) window.clearTimeout(id);
+    this.clipTimers = [];
+  }
+
+  private seqSpec(track: number): { layer: EngineLayer; mix: "a" | "b" | "seq" } | null {
+    const g = this.patch.groove ?? defaultGroove();
+    const id = g.trackSound?.[track] ?? (g.target === "b" ? "b" : "a");
+    if (id === "a") return this.stack.a.on ? { layer: this.stack.a, mix: "a" } : null;
+    if (id === "b") return this.stack.b.on ? { layer: this.stack.b, mix: "b" } : null;
+    const p = this.bank.find((x) => x.id === id);
+    if (!p) return this.stack.a.on ? { layer: this.stack.a, mix: "a" } : null;
+    return { layer: { id: "a", on: true, level: 1, pan: 0, patch: p }, mix: "seq" };
+  }
+
+  private stopGroove() {
+    if (this.grooveTimer != null) {
+      window.clearTimeout(this.grooveTimer);
+      this.grooveTimer = null;
+    }
+    this.clearClipTimers();
+    for (const v of this.seqVoices) v.release(this.patch);
+    this.seqVoices = [];
+    this.seqByTrack = [[], [], [], []];
+    this.groovePlaying = false;
+    this.listener.onGrooveStep?.(-1);
+  }
+
+  private grooveTick = () => {
+    const g = this.patch.groove ?? defaultGroove();
+    if (!this.groovePlaying || (!g.seqOn && !g.drumsOn)) {
+      this.stopGroove();
+      return;
+    }
+    const len = Math.max(1, stepsOf(g));
+    const i = this.grooveIndex % len;
+    const tempo = this.hostBpm ?? this.patch.arp.tempo;
+    const stepDur = (60 / Math.max(40, tempo)) * 0.25;
+    const swing = i % 2 === 1 ? stepDur * this.patch.arp.swing * 0.5 : 0;
+    const now = this.ctx.currentTime;
+    this.grooveNow = i;
+    this.grooveTickAt = performance.now();
+
+    if (g.drumsOn) {
+      for (const part of DRUM_PARTS) {
+        if (g.drumMute[part]) continue;
+        const hit = g.drums[part][i];
+        if (hit?.on) this.drums?.hit(part, hit.vel, g.kit, now);
+      }
+    }
+
+    if (g.seqOn) {
+      for (let t = 0; t < 4; t++) {
+        if (g.mute[t]) {
+          for (const v of this.seqByTrack[t] ?? []) v.release(this.patch);
+          this.seqByTrack[t] = [];
+          continue;
+        }
+        const clips = g.tracks[t] ?? [];
+        for (const n of clips) {
+          const start = ((n.start % len) + len) % len;
+          if (Math.floor(start) !== i) continue;
+          const delayMs = Math.max(0, (start - i) * stepDur) * 1000;
+          const holdMs = Math.max(40, n.dur * stepDur * 1000);
+          const track = t;
+          const fire = () => {
+            const live = this.patch.groove ?? defaultGroove();
+            if (!this.groovePlaying || live.mute[track]) return;
+            const spec = this.seqSpec(track);
+            if (!spec) return;
+            const created: Voice[] = [this.spawnOne(n.note, n.vel, this.ctx.currentTime, spec.layer, spec.mix)];
+            this.seqByTrack[track] = [...(this.seqByTrack[track] ?? []), ...created];
+            this.seqVoices = this.seqByTrack.flat();
+            const rid = window.setTimeout(() => {
+              for (const v of created) v.release(this.patch);
+              this.seqByTrack[track] = (this.seqByTrack[track] ?? []).filter((v) => !created.includes(v));
+              this.seqVoices = this.seqByTrack.flat();
+            }, holdMs);
+            this.clipTimers.push(rid);
+          };
+          if (delayMs < 4) fire();
+          else this.clipTimers.push(window.setTimeout(fire, delayMs));
+        }
+      }
+      this.seqVoices = this.seqByTrack.flat();
+    }
+
+    this.listener.onGrooveStep?.(i);
+    this.grooveIndex = (i + 1) % len;
+    this.grooveTimer = window.setTimeout(this.grooveTick, (stepDur + swing) * 1000);
   };
 
   private orderArp(notes: number[]): number[] {

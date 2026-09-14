@@ -1,4 +1,5 @@
 import type { ArpStep } from "./arp";
+import type { Groove } from "./groove";
 
 export type Waveform =
   | "sine"
@@ -85,6 +86,7 @@ export type Patch = {
   polyMode: PolyMode;
   master: number;
   arp: ArpParams;
+  groove?: Groove;
   stack?: PatchStack;
 };
 
