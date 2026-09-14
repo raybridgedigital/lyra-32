@@ -52,6 +52,12 @@
     font-family: var(--font-sans);
   }
 
+  html.lyra-modal-open,
+  html.lyra-modal-open body {
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+
   h1,
   h2,
   h3 {
@@ -271,8 +277,29 @@
     grid-template-columns: repeat(5, minmax(0, 1fr));
   }
 
-  .lyra-knobs-2 {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .lyra-knobs-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .lyra-arm {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 1.35rem;
+    padding: 0 0.4rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    line-height: 1;
+    color: var(--color-muted);
+    background: var(--color-elevated);
+  }
+
+  .lyra-arm.is-on {
+    color: var(--color-accent-fg);
+    background: var(--color-accent);
   }
 
   .lyra-matrix-row {

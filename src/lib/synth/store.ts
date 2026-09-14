@@ -65,6 +65,7 @@ type State = {
   clockRunning: boolean;
   clockFollow: boolean;
   dawOpen: boolean;
+  helpOpen: boolean;
   voices: number;
   octave: number;
   activeNotes: number[];
@@ -88,6 +89,7 @@ type State = {
   setMidiPort: (id: string) => void;
   setClockFollow: (on: boolean) => void;
   setDawOpen: (on: boolean) => void;
+  setHelpOpen: (on: boolean) => void;
   hydrate: () => void;
 };
 
@@ -192,6 +194,7 @@ export const useSynth = create<State>((set, get) => ({
   clockRunning: false,
   clockFollow: false,
   dawOpen: false,
+  helpOpen: false,
   voices: 0,
   octave: 0,
   activeNotes: [],
@@ -311,7 +314,8 @@ export const useSynth = create<State>((set, get) => ({
     s.engine?.setHostTempo(on ? s.clockBpm : null);
   },
 
-  setDawOpen: (on) => set({ dawOpen: on }),
+  setDawOpen: (on) => set({ dawOpen: on, helpOpen: on ? false : get().helpOpen }),
+  setHelpOpen: (on) => set({ helpOpen: on, dawOpen: on ? false : get().dawOpen }),
 
   hydrate: () => {
     let showKeys = true;
@@ -346,7 +350,16 @@ export function bindComputerKeyboard() {
       useSynth.getState().shiftOctave(1);
       return;
     }
+    if (k === "?" ) {
+      const s = useSynth.getState();
+      s.setHelpOpen(!s.helpOpen);
+      return;
+    }
     if (k === "escape") {
+      if (useSynth.getState().helpOpen) {
+        useSynth.getState().setHelpOpen(false);
+        return;
+      }
       if (useSynth.getState().dawOpen) {
         useSynth.getState().setDawOpen(false);
         return;

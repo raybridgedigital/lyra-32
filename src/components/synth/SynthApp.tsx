@@ -4,6 +4,7 @@ import {
   Cable,
   ChevronLeft,
   ChevronRight,
+  CircleHelp,
   Keyboard as KeyboardIcon,
   Pencil,
   Save,
@@ -33,6 +34,7 @@ import type {
 } from "@/lib/synth/types";
 import { Keyboard } from "./Keyboard";
 import { DawPanel } from "./DawPanel";
+import { HelpPanel } from "./HelpPanel";
 import { PatternBar } from "./PatternBar";
 import { AmtFader, Knob, LfoSlider, Seg } from "./Knob";
 import { Scope } from "./Scope";
@@ -116,6 +118,8 @@ export function SynthApp() {
   const toggleKeys = useSynth((s) => s.toggleKeys);
   const dawOpen = useSynth((s) => s.dawOpen);
   const setDawOpen = useSynth((s) => s.setDawOpen);
+  const helpOpen = useSynth((s) => s.helpOpen);
+  const setHelpOpen = useSynth((s) => s.setHelpOpen);
   const clockFollow = useSynth((s) => s.clockFollow);
   const clockRunning = useSynth((s) => s.clockRunning);
   const engine = useSynth((s) => s.engine);
@@ -183,7 +187,7 @@ export function SynthApp() {
           <div className="flex min-w-0 items-center gap-3">
             <div className="lyra-brand min-w-0 font-display text-lg font-bold tracking-tight text-accent sm:text-xl">
               <span>LYRA-32</span>
-              <span className="lyra-byline">Mk III · by Ray Bridge Digital</span>
+              <span className="lyra-byline">Mk IV.1 · by Ray Bridge Digital</span>
             </div>
             <div className="ml-auto hidden w-36 shrink-0 lg:block">{engine ? <Scope compact /> : <div className="h-9 rounded-md bg-ink-soft" />}</div>
           </div>
@@ -311,6 +315,18 @@ export function SynthApp() {
             </button>
             <button
               type="button"
+              onClick={() => setHelpOpen(true)}
+              className={cn(
+                "grid size-10 place-items-center rounded-md",
+                helpOpen ? "bg-accent text-accent-fg" : "bg-elevated text-muted hover:text-fg",
+              )}
+              aria-label="Open help"
+              title="Help (?)"
+            >
+              <CircleHelp className="size-4" />
+            </button>
+            <button
+              type="button"
               onClick={panic}
               className="h-10 rounded-md bg-elevated px-3 text-base font-semibold text-muted hover:text-fg"
             >
@@ -390,34 +406,54 @@ export function SynthApp() {
                 label="Level"
                 value={p.osc2.level}
                 defaultValue={0.7}
+                arm
+                armOn={0.7}
                 format={fmtPct}
                 onChange={(level) => update(clonePatch(p, { osc2: { ...p.osc2, level } }))}
               />
-              <Knob label="FM" value={p.fmIndex} defaultValue={0} format={fmtPct} onChange={(fmIndex) => update(clonePatch(p, { fmIndex }))} />
+              <Knob label="FM" value={p.fmIndex} defaultValue={0} arm armOn={0.28} format={fmtPct} onChange={(fmIndex) => update(clonePatch(p, { fmIndex }))} />
             </div>
           </Cell>
 
           <Cell title="Mixer">
-            <Seg
-              compact
-              value={p.polyMode}
-              options={
-                [
-                  { id: "poly", label: "Poly" },
-                  { id: "mono", label: "Mono" },
-                  { id: "legato", label: "Leg" },
-                ] as { id: PolyMode; label: string }[]
-              }
-              onChange={(polyMode) => update(clonePatch(p, { polyMode }))}
-            />
+            <div className="flex gap-1">
+              <div className="min-w-0 flex-[3]">
+                <Seg
+                  compact
+                  value={p.polyMode}
+                  options={
+                    [
+                      { id: "poly", label: "Poly" },
+                      { id: "mono", label: "Mono" },
+                      { id: "legato", label: "Leg" },
+                    ] as { id: PolyMode; label: string }[]
+                  }
+                  onChange={(polyMode) => update(clonePatch(p, { polyMode }))}
+                />
+              </div>
+              <div className="min-w-0 flex-[2]">
+                <Seg
+                  compact
+                  value={String(p.unison.voices) as "1" | "2" | "3"}
+                  options={[
+                    { id: "1", label: "Off" },
+                    { id: "2", label: "2" },
+                    { id: "3", label: "3" },
+                  ]}
+                  onChange={(v) =>
+                    update(clonePatch(p, { unison: { ...p.unison, voices: Number(v) as 1 | 2 | 3 } }))
+                  }
+                />
+              </div>
+            </div>
             <div className="lyra-knobs mt-3">
-              <Knob label="Sub" value={p.subLevel} format={fmtPct} onChange={(subLevel) => update(clonePatch(p, { subLevel }))} />
-              <Knob label="Noise" value={p.noiseLevel} format={fmtPct} onChange={(noiseLevel) => update(clonePatch(p, { noiseLevel }))} />
-              <Knob label="Drive" value={p.drive} format={fmtPct} onChange={(drive) => update(clonePatch(p, { drive }))} />
-              <Knob label="Ring" value={p.ring} format={fmtPct} onChange={(ring) => update(clonePatch(p, { ring }))} />
-              <Knob label="Sync" value={p.sync} format={fmtPct} onChange={(sync) => update(clonePatch(p, { sync }))} />
-              <Knob label="Drift" value={p.drift} format={fmtPct} onChange={(drift) => update(clonePatch(p, { drift }))} />
-              <Knob label="Glide" value={p.glide} format={fmtPct} onChange={(glide) => update(clonePatch(p, { glide }))} />
+              <Knob label="Sub" value={p.subLevel} arm armOn={0.4} format={fmtPct} onChange={(subLevel) => update(clonePatch(p, { subLevel }))} />
+              <Knob label="Noise" value={p.noiseLevel} arm armOn={0.22} format={fmtPct} onChange={(noiseLevel) => update(clonePatch(p, { noiseLevel }))} />
+              <Knob label="Drive" value={p.drive} arm armOn={0.28} format={fmtPct} onChange={(drive) => update(clonePatch(p, { drive }))} />
+              <Knob label="Ring" value={p.ring} arm armOn={0.4} format={fmtPct} onChange={(ring) => update(clonePatch(p, { ring }))} />
+              <Knob label="Sync" value={p.sync} arm armOn={0.35} format={fmtPct} onChange={(sync) => update(clonePatch(p, { sync }))} />
+              <Knob label="Drift" value={p.drift} arm armOn={0.2} format={fmtPct} onChange={(drift) => update(clonePatch(p, { drift }))} />
+              <Knob label="Glide" value={p.glide} arm armOn={0.18} format={fmtPct} onChange={(glide) => update(clonePatch(p, { glide }))} />
               <Knob label="Out" value={p.master} format={fmtPct} onChange={(master) => update(clonePatch(p, { master }))} />
             </div>
           </Cell>
@@ -462,16 +498,20 @@ export function SynthApp() {
               <Knob
                 label="Env"
                 value={p.filter.envAmount}
+                arm
+                armOn={0.35}
                 format={fmtPct}
                 onChange={(envAmount) => update(clonePatch(p, { filter: { ...p.filter, envAmount } }))}
               />
               <Knob
                 label="Key"
                 value={p.filter.keyTrack}
+                arm
+                armOn={0.3}
                 format={fmtPct}
                 onChange={(keyTrack) => update(clonePatch(p, { filter: { ...p.filter, keyTrack } }))}
               />
-              <Knob label="Vel" value={p.velFilt} format={fmtPct} onChange={(velFilt) => update(clonePatch(p, { velFilt }))} />
+              <Knob label="Vel" value={p.velFilt} arm armOn={0.35} format={fmtPct} onChange={(velFilt) => update(clonePatch(p, { velFilt }))} />
             </div>
           </Cell>
 
@@ -490,6 +530,8 @@ export function SynthApp() {
               <Knob
                 label="Delay"
                 value={p.fx.delayMix}
+                arm
+                armOn={0.22}
                 format={fmtPct}
                 onChange={(delayMix) => update(clonePatch(p, { fx: { ...p.fx, delayMix } }))}
               />
@@ -510,18 +552,24 @@ export function SynthApp() {
               <Knob
                 label="Rev"
                 value={p.fx.reverbMix}
+                arm
+                armOn={0.22}
                 format={fmtPct}
                 onChange={(reverbMix) => update(clonePatch(p, { fx: { ...p.fx, reverbMix } }))}
               />
               <Knob
                 label="Chor"
                 value={p.fx.chorusMix}
+                arm
+                armOn={0.2}
                 format={fmtPct}
                 onChange={(chorusMix) => update(clonePatch(p, { fx: { ...p.fx, chorusMix } }))}
               />
               <Knob
                 label="Phsr"
                 value={p.fx.phaserMix}
+                arm
+                armOn={0.16}
                 format={fmtPct}
                 onChange={(phaserMix) => update(clonePatch(p, { fx: { ...p.fx, phaserMix } }))}
               />
@@ -581,6 +629,8 @@ export function SynthApp() {
               <Knob
                 label="Swing"
                 value={p.arp.swing}
+                arm
+                armOn={0.22}
                 format={fmtPct}
                 onChange={(swing) => update(clonePatch(p, { arp: { ...p.arp, swing } }))}
               />
@@ -827,6 +877,7 @@ export function SynthApp() {
         </div>
       )}
       <DawPanel />
+      <HelpPanel />
     </div>
   );
 }
@@ -865,7 +916,7 @@ function LfoCell({ title, lfo, onChange }: { title: string; lfo: LfoParams; onCh
             format={(v) => v.toFixed(1)}
             onChange={(rate) => onChange({ ...lfo, rate })}
           />
-          <LfoSlider label="Depth" value={lfo.depth} format={fmtPct} onChange={(depth) => onChange({ ...lfo, depth })} />
+          <LfoSlider label="Depth" value={lfo.depth} arm format={fmtPct} onChange={(depth) => onChange({ ...lfo, depth })} />
         </div>
       </div>
     </Cell>

@@ -10,6 +10,10 @@ type Props = {
   onChange: (v: number) => void;
   format?: (v: number) => string;
   defaultValue?: number;
+  /** Clickable name: bypasses to 0 (or armOff) and restores the last amount. */
+  arm?: boolean;
+  armOff?: number;
+  armOn?: number;
 };
 
 const CX = 24;
@@ -25,6 +29,16 @@ function clamp(n: number, a: number, b: number) {
   return Math.max(a, Math.min(b, n));
 }
 
+function useArm(value: number, onChange: (v: number) => void, off: number, fallback: number) {
+  const last = useRef(Math.abs(value - off) > 0.012 ? value : fallback);
+  if (Math.abs(value - off) > 0.012) last.current = value;
+  const on = Math.abs(value - off) > 0.012;
+  return {
+    on,
+    toggle: () => onChange(on ? off : last.current),
+  };
+}
+
 export function Knob({
   label,
   value,
@@ -34,6 +48,9 @@ export function Knob({
   onChange,
   format,
   defaultValue,
+  arm,
+  armOff,
+  armOn,
 }: Props) {
   const start = useRef<{ y: number; v: number } | null>(null);
   const safe = Number.isFinite(value) ? value : min;
@@ -41,6 +58,8 @@ export function Knob({
   const t = span === 0 ? 0 : clamp((safe - min) / span, 0, 1);
   const angle = START_DEG + t * SWEEP_DEG;
   const readout = format ? format(safe) : safe.toFixed(2);
+  const off = armOff ?? min;
+  const armed = useArm(safe, onChange, off, armOn ?? (defaultValue != null && defaultValue !== off ? defaultValue : min + span * 0.35));
 
   const onPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
     e.preventDefault();
@@ -64,7 +83,7 @@ export function Knob({
   };
 
   return (
-    <div className="flex min-w-0 flex-col items-center gap-1">
+    <div className={cn("flex min-w-0 flex-col items-center gap-1", arm && !armed.on && "opacity-55")}>
       <button
         type="button"
         aria-label={`${label} ${readout}`}
@@ -119,7 +138,20 @@ export function Knob({
         </svg>
       </button>
       <div className="flex max-w-full items-baseline justify-center gap-1 px-0.5">
-        <span className="truncate text-sm font-semibold uppercase tracking-wide text-muted">{label}</span>
+        {arm ? (
+          <button
+            type="button"
+            className={cn("lyra-arm", armed.on && "is-on")}
+            aria-pressed={armed.on}
+            aria-label={`${label} ${armed.on ? "on" : "off"}`}
+            title={`${label} ${armed.on ? "on — click to bypass" : "off — click to restore"}`}
+            onClick={armed.toggle}
+          >
+            {label}
+          </button>
+        ) : (
+          <span className="truncate text-sm font-semibold uppercase tracking-wide text-muted">{label}</span>
+        )}
         <span className="shrink-0 font-mono text-sm tabular-nums text-fg">{readout}</span>
       </div>
     </div>
@@ -181,8 +213,19 @@ export function AmtFader({
   value: number;
   onChange: (v: number) => void;
 }) {
+  const armed = useArm(value, onChange, 0, 0.35);
   return (
-    <label className="flex min-w-0 flex-1 items-center gap-2">
+    <div className="flex min-w-0 flex-1 items-center gap-2">
+      <button
+        type="button"
+        className={cn("lyra-arm shrink-0", armed.on && "is-on")}
+        aria-pressed={armed.on}
+        aria-label={`${label} ${armed.on ? "on" : "off"}`}
+        title={armed.on ? "Bypass this route" : "Enable this route"}
+        onClick={armed.toggle}
+      >
+        {label}
+      </button>
       <input
         type="range"
         min={-1}
@@ -195,7 +238,7 @@ export function AmtFader({
         onPointerUp={(e) => e.currentTarget.blur()}
       />
       <span className="w-10 shrink-0 text-right font-mono text-sm tabular-nums text-fg">{Math.round(value * 100)}</span>
-    </label>
+    </div>
   );
 }
 
@@ -207,6 +250,8 @@ export function LfoSlider({
   step = 0.001,
   format,
   onChange,
+  arm,
+  armOn = 0.25,
 }: {
   label: string;
   value: number;
@@ -215,13 +260,29 @@ export function LfoSlider({
   step?: number;
   format: (v: number) => string;
   onChange: (v: number) => void;
+  arm?: boolean;
+  armOn?: number;
 }) {
   const n = typeof value === "number" && Number.isFinite(value) ? value : min;
   const span = max - min || 1;
   const t = clamp((n - min) / span, 0, 1);
+  const armed = useArm(n, onChange, min, armOn);
   return (
     <>
-      <span className="lyra-lfo-label">{label}</span>
+      {arm ? (
+        <button
+          type="button"
+          className={cn("lyra-arm lyra-lfo-label justify-self-start", armed.on && "is-on")}
+          aria-pressed={armed.on}
+          aria-label={`${label} ${armed.on ? "on" : "off"}`}
+          title={`${label} ${armed.on ? "on — click to bypass" : "off — click to restore"}`}
+          onClick={armed.toggle}
+        >
+          {label}
+        </button>
+      ) : (
+        <span className="lyra-lfo-label">{label}</span>
+      )}
       <input
         type="range"
         min={min}

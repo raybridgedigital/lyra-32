@@ -2,6 +2,7 @@ import { Cable, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { isIacPort } from "@/lib/synth/midi";
 import { useSynth } from "@/lib/synth/store";
+import { useOverlayScrollLock } from "./HelpPanel";
 
 export function DawPanel() {
   const open = useSynth((s) => s.dawOpen);
@@ -14,6 +15,7 @@ export function DawPanel() {
   const clockFollow = useSynth((s) => s.clockFollow);
   const setClockFollow = useSynth((s) => s.setClockFollow);
   const midiStatus = useSynth((s) => s.midiStatus);
+  useOverlayScrollLock(open);
 
   if (!open) return null;
 
@@ -22,7 +24,8 @@ export function DawPanel() {
       <div
         role="dialog"
         aria-labelledby="daw-title"
-        className="max-h-[min(90dvh,40rem)] w-full max-w-3xl overflow-y-auto rounded-xl border border-border bg-surface p-5 shadow-panel"
+        className="max-h-[min(90dvh,40rem)] w-full max-w-3xl overflow-y-auto overscroll-contain rounded-xl border border-border bg-surface p-5 shadow-panel"
+        data-modal-scroll
       >
         <div className="mb-4 flex items-center gap-2">
           <Cable className="size-5 text-accent" />
