@@ -2,6 +2,7 @@ import type { Patch } from "./types";
 import { clonePatch, mx, patch } from "./patch-kit";
 import { EXTRA_FACTORY } from "./factory-extra";
 import { EXTRA_V43 } from "./factory-v43";
+import { EXTRA_ERA } from "./factory-era";
 import { CATEGORY_ORDER } from "./patch-kit";
 
 export { clonePatch, CATEGORY_ORDER };
@@ -438,7 +439,7 @@ const CORE: Patch[] = [
   }),
 ];
 
-export const FACTORY: Patch[] = [...CORE, ...EXTRA_FACTORY, ...EXTRA_V43];
+export const FACTORY: Patch[] = [...CORE, ...EXTRA_FACTORY, ...EXTRA_V43, ...EXTRA_ERA];
 
 export const INIT_PATCH = clonePatch(FACTORY[0]!);
 
@@ -449,6 +450,8 @@ export function groupByCategory(patches: Patch[]): { category: string; patches: 
     list.push(p);
     map.set(p.category, list);
   }
+  const byName = (a: Patch, b: Patch) => a.name.localeCompare(b.name, undefined, { sensitivity: "base", numeric: true });
+  for (const list of map.values()) list.sort(byName);
   const known = CATEGORY_ORDER.filter((c) => map.has(c)).map((c) => ({
     category: c,
     patches: map.get(c)!,

@@ -20,7 +20,14 @@ function loadUser(): Patch[] {
     const raw = localStorage.getItem(USER_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw) as Patch[];
-    return Array.isArray(parsed) ? parsed : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed.flatMap((p) => {
+      try {
+        return [clonePatch(p)];
+      } catch {
+        return [];
+      }
+    });
   } catch {
     return [];
   }
@@ -105,6 +112,7 @@ type State = {
   dawOpen: boolean;
   helpOpen: boolean;
   voices: number;
+  cutoffMod: number;
   octave: number;
   transpose: number;
   activeNotes: number[];
@@ -239,7 +247,10 @@ function hookMidi(engine: LyraEngine) {
       noteOn: (n, v) => useSynth.getState().noteOn(n, v),
       noteOff: (n) => useSynth.getState().noteOff(n),
       cc: (ctl, value) => {
-        if (ctl === 1 || ctl === 74) engine.setCutoffMod(value);
+        if (ctl === 1 || ctl === 74) {
+          engine.setCutoffMod(value);
+          useSynth.setState({ cutoffMod: value });
+        }
         if (ctl === 7) {
           const p = clonePatch(useSynth.getState().patch, { master: value });
           useSynth.getState().setPatch(p);
@@ -327,6 +338,7 @@ export const useSynth = create<State>((set, get) => ({
   dawOpen: false,
   helpOpen: false,
   voices: 0,
+  cutoffMod: 0,
   octave: 0,
   transpose: 0,
   activeNotes: [],
@@ -513,7 +525,7 @@ export const useSynth = create<State>((set, get) => ({
     get().engine?.panic();
     soundingByInput.clear();
     recOpen.clear();
-    set({ activeNotes: [], groovePlaying: false, recMode: "off", grooveStep: -1 });
+    set({ activeNotes: [], groovePlaying: false, recMode: "off", grooveStep: -1, cutoffMod: 0 });
   },
 
   toggleMute: () => {
@@ -811,6 +823,12 @@ if (typeof window !== "undefined") {
       voices: s.voices,
       ctx: s.engine?.ctx.state ?? s.ctxState,
       notes: s.activeNotes,
+      cutoffMod: s.cutoffMod,
+      setCutoffMod: (v: number) => {
+        const n = Math.max(0, Math.min(1, Number(v) || 0));
+        s.engine?.setCutoffMod(n);
+        useSynth.setState({ cutoffMod: n });
+      },
     };
   };
 }

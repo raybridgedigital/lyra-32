@@ -13,12 +13,13 @@ export type Waveform =
 export type FilterType = "lowpass" | "highpass" | "bandpass" | "notch";
 export type FilterSlope = 12 | 24;
 export type LfoDest = "cutoff" | "pitch" | "pan" | "amp" | "res" | "fm";
-export type LfoWave = "sine" | "triangle" | "sawtooth" | "square";
+export type LfoWave = "sine" | "triangle" | "sawtooth" | "square" | "samplehold";
 export type PolyMode = "poly" | "mono" | "legato";
 export type ArpMode = "up" | "down" | "updown" | "random" | "asplayed";
 export type ArpRate = "1/4" | "1/8" | "1/8t" | "1/16" | "1/16t";
-export type ModSource = "lfo1" | "lfo2" | "fenv" | "vel" | "mod" | "at";
-export type ModDest = LfoDest;
+export type ModSource = "lfo1" | "lfo2" | "fenv" | "vel" | "mod" | "at" | "key" | "rand";
+export type ModDest = LfoDest | "pwm" | "oscMix" | "drive" | "fx" | "glide";
+export type UniVoices = 1 | 2 | 3 | 4 | 5 | 6 | 7;
 
 export type OscParams = {
   wave: Waveform;
@@ -29,7 +30,7 @@ export type OscParams = {
   pwm: number;
 };
 
-export type LfoParams = { rate: number; depth: number; dest: LfoDest; wave: LfoWave };
+export type LfoParams = { rate: number; depth: number; dest: LfoDest; wave: LfoWave; fade?: number };
 
 export type ModRoute = { src: ModSource; dest: ModDest; amount: number };
 
@@ -59,6 +60,7 @@ export type Patch = {
   sync: number;
   drift: number;
   velFilt: number;
+  velAmp?: number;
   drive: number;
   filter: {
     type: FilterType;
@@ -67,6 +69,7 @@ export type Patch = {
     resonance: number;
     envAmount: number;
     keyTrack: number;
+    tone?: number;
   };
   ampEnv: { attack: number; decay: number; sustain: number; release: number };
   filterEnv: { attack: number; decay: number; sustain: number; release: number };
@@ -81,7 +84,7 @@ export type Patch = {
     chorusMix: number;
     phaserMix: number;
   };
-  unison: { voices: 1 | 2 | 3; detune: number; spread: number };
+  unison: { voices: UniVoices; detune: number; spread: number };
   glide: number;
   polyMode: PolyMode;
   master: number;

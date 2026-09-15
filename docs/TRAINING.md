@@ -1,4 +1,4 @@
-# LYRA-32 Mk IV.4 — training manual
+# LYRA-32 Mk IV.5 — training manual
 
 Hybrid 32-voice web synthesizer by Ray Bridge Digital. Play it in Chrome, Edge, or Firefox. This is the full course — the in-app Help (**?**) is the same material in short form.
 
@@ -12,11 +12,11 @@ LYRA-32 is a flagship-style subtractive / hybrid instrument in the browser:
 - Sub sine + white noise
 - Multimode filter (LP / HP / BP / Notch, 12 or 24 dB)
 - Amp EG + Filter EG
-- Two LFOs + 4-slot modulation matrix
+- Two LFOs + 6-slot modulation matrix
 - Ring, sync, FM, unison, drift, drive
 - Arpeggiator with Hold/Latch and a 16-step pattern
 - FX: delay, reverb, chorus, phaser
-- 171 factory patches, favorites, user saves
+- 271 factory patches, favorites, user saves
 - USB MIDI, computer keyboard, on-screen piano
 - DAW mode (Ableton / Logic via IAC MIDI clock)
 
@@ -105,7 +105,7 @@ Waves: Sine, Tri, Saw, Square, Pulse, Super, Table.
 |---|---|
 | Sub | Sine, one octave under Osc 1 |
 | Noise | White noise into the filter |
-| Uni / Det / Spr | 1–3 unison copies, detune, stereo spread |
+| Uni / Det / Spr | Off plus 2–7 unison copies, detune, stereo spread |
 | Drive | Tanh saturation before the filter |
 | Ring | Osc 2 × Osc 1 (bells, clang) |
 | Sync | Osc 2 hard-syncs Osc 1 (screams, leads) |
@@ -116,9 +116,11 @@ Waves: Sine, Tri, Saw, Square, Pulse, Super, Table.
 
 ### Filter
 
-LP / HP / BP / Notch. 12 or 24 dB/oct. **Cut**, **Res**, **Env** (filter EG depth), **Key** (higher notes brighter).
+LP / HP / BP / Notch. 12 or 24 dB/oct. **Cut**, **Res**, **Env** (filter EG depth), **Tone** (tilt after the filter), **Key** (higher notes brighter).
 
-Cutoff on a held note follows the knob. Filter **type** is sampled at note-on.
+Cutoff on a held note follows the knob. Filter **type** is sampled at note-on. Tone does not move cutoff — left is darker, right is brighter.
+
+Amp EG **Vel** is velocity to loudness. Filter **Vel** is velocity to cutoff.
 
 ### Amp EG / Filter EG
 
@@ -128,17 +130,17 @@ Amp EG = loudness. Filter EG = how the cutoff moves over the note. A pluck: shor
 
 ### LFO 1 / LFO 2
 
-Rate and Depth are **sliders** (not knobs). Destinations: Cut, Pitch, Pan, Amp, Res, FM. Waves: sine, tri, saw, square.
+Rate, Depth, and Fade are **sliders** (not knobs). Destinations: Cut, Pitch, Pan, Amp, Res, FM. Waves: sine, tri, saw, square, S&H.
 
-Rate/wave change live on sounding notes. Destination is captured at note-on.
+Rate/wave change live on sounding notes. Destination is captured at note-on. Fade ramps LFO depth in from silence.
 
-### Matrix (4 slots)
+### Matrix (6 slots)
 
 Extra modulation, stacked on the LFO plates.
 
-**Sources:** LFO1, LFO2, FEG (filter envelope), Vel (velocity 0–1), Mod (mod wheel), AT (aftertouch).
+**Sources:** LFO1, LFO2, FEG (filter envelope), Vel (velocity 0–1), Mod (mod wheel), AT (aftertouch), Key, Rnd.
 
-**Destinations:** Cut, Pitch, Pan, Amp, Res, FM.
+**Destinations:** Cut, Pitch, Pan, Amp, Res, FM, PWM, Mix, Drv, FX, Gld.
 
 **Amt** is bipolar (−100 … +100). Near-zero amounts are ignored.
 
@@ -252,12 +254,13 @@ In LYRA: **DAW** button → pick the IAC port → **Clock on**. Keep the tab vis
 Osc1 + Osc2 + Sub + Noise
         → Drive (tanh)
         → Filter (12/24, EG, key, vel)
+        → Tone (tilt EQ, cutoff stays put)
         → Amp EG → pan → aftertouch/mod amp
         → FX splits (chorus, delay, reverb, phaser)
         → Master → limiter → speakers
 ```
 
-Unison/Super copies are panned by Spread. LFOs and matrix tap cutoff (detune), oscillator detune, pan, amp, resonance, and FM index.
+Unison/Super copies are panned by Spread. LFOs and matrix tap cutoff, pitch, pan, amp, resonance, FM, PWM, osc mix, drive, FX send, and glide.
 
 Most oscillator/filter-type/matrix dest changes apply on the **next note**. Cutoff, FX mixes, LFO rate/wave, and master apply live.
 
@@ -286,4 +289,4 @@ Most oscillator/filter-type/matrix dest changes apply on the **next note**. Cuto
 4. Load **Techno Seq**. Lift your hands (Hold). Click pattern steps. Hit Panic.
 5. Mute, twist Cut, confirm silence, unmute.
 
-That is the instrument. Design from Init Dual Saw; steal ideas from the 171 factory patches.
+That is the instrument. Design from Init Dual Saw; steal ideas from the 271 factory patches.

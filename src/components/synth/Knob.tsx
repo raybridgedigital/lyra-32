@@ -12,6 +12,8 @@ type Props = {
   defaultValue?: number;
   /** Clickable name: bypasses to 0 (or armOff) and restores the last amount. */
   arm?: boolean;
+  /** Display-only overlay (e.g. live cutoff from mod wheel). Does not write the patch. */
+  liveValue?: number;
   armOff?: number;
   armOn?: number;
 };
@@ -51,12 +53,17 @@ export function Knob({
   arm,
   armOff,
   armOn,
+  liveValue,
 }: Props) {
   const start = useRef<{ y: number; v: number } | null>(null);
   const safe = Number.isFinite(value) ? value : min;
   const span = max - min;
   const t = span === 0 ? 0 : clamp((safe - min) / span, 0, 1);
   const angle = START_DEG + t * SWEEP_DEG;
+  const liveSafe = liveValue != null && Number.isFinite(liveValue) ? liveValue : null;
+  const liveT = liveSafe == null ? null : span === 0 ? 0 : clamp((liveSafe - min) / span, 0, 1);
+  const liveAngle = liveT == null ? null : START_DEG + liveT * SWEEP_DEG;
+  const liveDelta = liveT != null && Math.abs(liveT - t) > 0.008;
   const readout = format ? format(safe) : safe.toFixed(2);
   const off = armOff ?? min;
   const armed = useArm(safe, onChange, off, armOn ?? (defaultValue != null && defaultValue !== off ? defaultValue : min + span * 0.35));
@@ -135,6 +142,21 @@ export function Knob({
             />
             <circle cx={CX} cy={CY - R} r="2.4" fill="var(--color-accent)" />
           </g>
+          {liveDelta && liveAngle != null ? (
+            <g transform={`rotate(${liveAngle} ${CX} ${CY})`}>
+              <line
+                x1={CX}
+                y1={CY}
+                x2={CX}
+                y2={CY - 13}
+                stroke="#e8c078"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+                opacity="0.95"
+              />
+              <circle cx={CX} cy={CY - R} r="2.1" fill="#e8c078" />
+            </g>
+          ) : null}
         </svg>
       </button>
       <div className="flex max-w-full items-baseline justify-center gap-1 px-0.5">

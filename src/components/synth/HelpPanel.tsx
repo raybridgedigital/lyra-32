@@ -200,7 +200,7 @@ function PlayTab() {
         items={[
           <>Class-compliant keyboards (M-Audio, etc.) over USB-C. Chrome, Edge, or Firefox. Not Safari.</>,
           <>Allow MIDI when the browser asks. Status shows the port name when it is connected.</>,
-          <>Pitch wheel bends sounding notes ±2 semitones. Mod wheel (CC1) and CC74 open cutoff. CC7 is volume. CC64 sustain.</>,
+          <>Pitch wheel bends sounding notes ±2 semitones. Mod wheel (CC1) and CC74 open cutoff — the Cut knob stays put; a gold needle and the Mod meter next to it follow the wheel. CC7 is volume. CC64 sustain.</>,
           <>Channel or poly aftertouch feeds matrix source AT — route it to cutoff, pitch, amp, and so on.</>,
         ]}
       />
@@ -228,7 +228,7 @@ function SoundTab() {
       <Ul
         items={[
           <>Sub — sine one octave under Osc 1. Noise — white noise into the filter.</>,
-          <>Uni / Det / Spr — 1–3 unison voices, detune, stereo spread. Super already has its own detune.</>,
+          <>Uni / Det / Spr — Off plus 2–7 unison voices, detune, stereo spread. Super already has its own detune.</>,
           <>Drive — tanh saturation after the mix, before the filter.</>,
           <>Ring — Osc 2 multiplies Osc 1 (bells, clang). Sync — Osc 2 hard-syncs Osc 1 (screams).</>,
           <>FM — Osc 2 modulates Osc 1 pitch. Drift — slow analog-style pitch wander.</>,
@@ -237,22 +237,23 @@ function SoundTab() {
       />
       <H>Filter</H>
       <P>
-        LP / HP / BP / Notch, 12 or 24 dB/oct. Cut, Res, Env (filter envelope amount), Key (higher notes brighter), Vel (velocity
-        opens cutoff).
+        LP / HP / BP / Notch, 12 or 24 dB/oct. Cut, Res, Env (filter envelope amount), Tone (tilt: left darker, right
+        brighter — cutoff stays put), Key (higher notes brighter), Vel (velocity opens cutoff). Amp EG Vel is velocity to
+        loudness.
       </P>
       <H>Envelopes</H>
       <P>Amp EG is loudness ADSR. Filter EG is the filter ADSR. Times are in milliseconds under 1 s, then seconds.</P>
       <H>LFOs</H>
       <P>
-        Two global LFOs. Rate and Depth are sliders. Dest: Cut, Pitch, Pan, Amp, Res, FM. Wave: sine, tri, saw, square. Rate
-        changes apply live; dest is sampled at note-on.
+        Two global LFOs. Rate, Depth, and Fade (rise time) are sliders. Dest: Cut, Pitch, Pan, Amp, Res, FM. Wave: sine,
+        tri, saw, square, S&H (stepped random). Rate changes apply live; dest is sampled at note-on.
       </P>
       <H>Matrix</H>
-      <P>Four extra routes, stacked on the LFO plates. Sources and destinations:</P>
+      <P>Six extra routes, stacked on the LFO plates. Sources and destinations:</P>
       <Ul
         items={[
-          <>Src: LFO1, LFO2, FEG (filter envelope), Vel (note velocity), Mod (mod wheel), AT (aftertouch).</>,
-          <>Dst: Cut, Pitch, Pan, Amp, Res, FM.</>,
+          <>Src: LFO1, LFO2, FEG (filter envelope), Vel (note velocity), Mod (mod wheel), AT (aftertouch), Key (low→high), Rnd (per note).</>,
+          <>Dst: Cut, Pitch, Pan, Amp, Res, FM, PWM, Mix (osc 1↔2), Drv, FX send, Gld (glide).</>,
           <>Amt is bipolar (−100 to +100). Amounts near zero are ignored.</>,
         ]}
       />
@@ -323,7 +324,7 @@ function StudioTab() {
       <H>Library</H>
       <Ul
         items={[
-          <>171 factory patches in Bass, Lead, Keys, Brass, Pad, Pluck, FX, Sequence, Drums, Strings, Techno, plus User.</>,
+          <>271 factory patches: core roles plus 100 era sounds (20 each for 2022–2026 — phonk, Jersey, Brat, Amapiano, botanica, jerk, and the rest of the last five years). Star a patch for Favorite.</>,
           <>Star a patch to drop it in Favorite. The header star is the same list.</>,
           <>Name this patch + Save writes a User copy in this browser (localStorage).</>,
           <>Pencil to rename a user patch, trash to delete. Factory names cannot be renamed.</>,
@@ -378,8 +379,8 @@ function AboutTab() {
     <>
       <H>LYRA-32</H>
       <P>
-        by Ray Bridge Digital · Mk IV.4 · Version 4.4. 32-voice hybrid synthesizer for Chrome, Edge, and Firefox. Dual
-        oscillator + sub + noise, dual LFO, 4-slot matrix, FX rack, arpeggiator with 16-step pattern, two-layer stack /
+        by Ray Bridge Digital · Mk IV.5 · Version 4.5. 32-voice hybrid synthesizer for Chrome, Edge, and Firefox. Dual
+        oscillator + sub + noise, dual LFO, 6-slot matrix, FX rack, arpeggiator with 16-step pattern, two-layer stack /
         split, and a groovebox (4 MIDI takes + 8-lane drums). USB-C MIDI, computer keys, or the on-screen piano. Not a
         VST/AU — DAW mode uses IAC MIDI.
       </P>

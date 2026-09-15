@@ -31,6 +31,7 @@ import type {
   Patch,
   PolyMode,
   Waveform,
+  UniVoices,
 } from "@/lib/synth/types";
 import { Keyboard } from "./Keyboard";
 import { DawPanel } from "./DawPanel";
@@ -76,6 +77,7 @@ const LFO_WAVE: { id: LfoWave; label: string }[] = [
   { id: "triangle", label: "Tri" },
   { id: "sawtooth", label: "Saw" },
   { id: "square", label: "Sqr" },
+  { id: "samplehold", label: "S&H" },
 ];
 
 const MOD_SRC: { id: ModSource; label: string }[] = [
@@ -85,6 +87,22 @@ const MOD_SRC: { id: ModSource; label: string }[] = [
   { id: "vel", label: "Vel" },
   { id: "mod", label: "Mod" },
   { id: "at", label: "AT" },
+  { id: "key", label: "Key" },
+  { id: "rand", label: "Rnd" },
+];
+
+const MATRIX_DEST: { id: ModDest; label: string }[] = [
+  { id: "cutoff", label: "Cut" },
+  { id: "pitch", label: "Pch" },
+  { id: "pan", label: "Pan" },
+  { id: "amp", label: "Amp" },
+  { id: "res", label: "Res" },
+  { id: "fm", label: "FM" },
+  { id: "pwm", label: "PWM" },
+  { id: "oscMix", label: "Mix" },
+  { id: "drive", label: "Drv" },
+  { id: "fx", label: "FX" },
+  { id: "glide", label: "Gld" },
 ];
 
 function Cell({ title, children, className }: { title: string; children: React.ReactNode; className?: string }) {
@@ -128,6 +146,7 @@ export function SynthApp() {
   const clockRunning = useSynth((s) => s.clockRunning);
   const engine = useSynth((s) => s.engine);
   const arpStep = useSynth((s) => s.arpStep);
+  const cutoffMod = useSynth((s) => s.cutoffMod);
   const [nameDraft, setNameDraft] = useState("");
   const [libCat, setLibCat] = useState("All");
   const [libQ, setLibQ] = useState("");
@@ -156,11 +175,13 @@ export function SynthApp() {
   const filteredFactory = useMemo(() => {
     const q = libQ.trim().toLowerCase();
     const pool = libCat === "Favorite" ? favoritePatches : factory;
-    return pool.filter((x) => {
-      if (libCat !== "All" && libCat !== "Favorite" && x.category !== libCat) return false;
-      if (!q) return true;
-      return x.name.toLowerCase().includes(q) || x.category.toLowerCase().includes(q);
-    });
+    return pool
+      .filter((x) => {
+        if (libCat !== "All" && libCat !== "Favorite" && x.category !== libCat) return false;
+        if (!q) return true;
+        return x.name.toLowerCase().includes(q) || x.category.toLowerCase().includes(q);
+      })
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base", numeric: true }));
   }, [factory, favoritePatches, libCat, libQ]);
 
   const update = (next: Patch) => setPatch(next);
@@ -401,20 +422,25 @@ export function SynthApp() {
                   onChange={(polyMode) => update(clonePatch(p, { polyMode }))}
                 />
               </div>
-              <div className="min-w-0 flex-[2]">
-                <Seg
-                  compact
-                  value={String(p.unison.voices) as "1" | "2" | "3"}
-                  options={[
-                    { id: "1", label: "Off" },
-                    { id: "2", label: "2" },
-                    { id: "3", label: "3" },
-                  ]}
-                  onChange={(v) =>
-                    update(clonePatch(p, { unison: { ...p.unison, voices: Number(v) as 1 | 2 | 3 } }))
+              <label className="flex h-8 shrink-0 items-center gap-1 rounded-md bg-elevated px-1.5 text-sm">
+                <span className="text-muted">Uni</span>
+                <select
+                  aria-label="Unison"
+                  className="h-8 bg-transparent text-fg"
+                  value={String(p.unison.voices)}
+                  onChange={(e) =>
+                    update(clonePatch(p, { unison: { ...p.unison, voices: Number(e.target.value) as UniVoices } }))
                   }
-                />
-              </div>
+                >
+                  <option value="1">Off</option>
+                  <option value="2">2</option>
+                  <option value="3">3</option>
+                  <option value="4">4</option>
+                  <option value="5">5</option>
+                  <option value="6">6</option>
+                  <option value="7">7</option>
+                </select>
+              </label>
             </div>
             <div className="lyra-knobs mt-3">
               <Knob label="Sub" value={p.subLevel} arm armOn={0.4} format={fmtPct} onChange={(subLevel) => update(clonePatch(p, { subLevel }))} />
@@ -428,37 +454,58 @@ export function SynthApp() {
             </div>
           </Cell>
 
-          <Cell title="Filter">
-            <div className="flex flex-col gap-1">
-              <Seg
-                value={p.filter.type}
-                options={
-                  [
-                    { id: "lowpass", label: "LP" },
-                    { id: "highpass", label: "HP" },
-                    { id: "bandpass", label: "BP" },
-                    { id: "notch", label: "N" },
-                  ] as { id: FilterType; label: string }[]
-                }
-                onChange={(type) => update(clonePatch(p, { filter: { ...p.filter, type } }))}
-              />
-              <Seg
-                value={String(p.filter.slope) as "12" | "24"}
-                options={[
-                  { id: "12", label: "12 dB" },
-                  { id: "24", label: "24 dB" },
-                ]}
-                onChange={(s) => update(clonePatch(p, { filter: { ...p.filter, slope: Number(s) as FilterSlope } }))}
-              />
+          <Cell title="Filter" className="lyra-filter">
+            <div className="lyra-filter-segs flex gap-1">
+              <div className="min-w-0 flex-[3]">
+                <Seg
+                  compact
+                  value={p.filter.type}
+                  options={
+                    [
+                      { id: "lowpass", label: "LP" },
+                      { id: "highpass", label: "HP" },
+                      { id: "bandpass", label: "BP" },
+                      { id: "notch", label: "N" },
+                    ] as { id: FilterType; label: string }[]
+                  }
+                  onChange={(type) => update(clonePatch(p, { filter: { ...p.filter, type } }))}
+                />
+              </div>
+              <div className="min-w-0 flex-[2]">
+                <Seg
+                  compact
+                  value={String(p.filter.slope) as "12" | "24"}
+                  options={[
+                    { id: "12", label: "12", title: "12 dB/oct" },
+                    { id: "24", label: "24", title: "24 dB/oct" },
+                  ]}
+                  onChange={(s) => update(clonePatch(p, { filter: { ...p.filter, slope: Number(s) as FilterSlope } }))}
+                />
+              </div>
             </div>
-            <div className="lyra-knobs lyra-knobs-5 mt-2">
-              <Knob
-                label="Cut"
-                value={p.filter.cutoff}
-                defaultValue={0.62}
-                format={fmtHz}
-                onChange={(cutoff) => update(clonePatch(p, { filter: { ...p.filter, cutoff } }))}
-              />
+            <div className="lyra-knobs lyra-filter-knobs">
+              <div className="lyra-cut-cell">
+                <Knob
+                  label="Cut"
+                  value={p.filter.cutoff}
+                  liveValue={Math.min(1, Math.max(0, p.filter.cutoff + cutoffMod * 0.4))}
+                  defaultValue={0.62}
+                  format={fmtHz}
+                  onChange={(cutoff) => update(clonePatch(p, { filter: { ...p.filter, cutoff } }))}
+                />
+                <div
+                  className={cn("lyra-mod-meter", cutoffMod > 0.02 && "is-live")}
+                  role="meter"
+                  aria-label="Mod wheel"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={Math.round(cutoffMod * 100)}
+                  title={`Mod wheel ${Math.round(cutoffMod * 100)}`}
+                  data-testid="mod-meter"
+                >
+                  <i style={{ height: `${Math.round(cutoffMod * 100)}%` }} />
+                </div>
+              </div>
               <Knob
                 label="Res"
                 value={p.filter.resonance}
@@ -474,6 +521,13 @@ export function SynthApp() {
                 onChange={(envAmount) => update(clonePatch(p, { filter: { ...p.filter, envAmount } }))}
               />
               <Knob
+                label="Tone"
+                value={p.filter.tone ?? 0.5}
+                defaultValue={0.5}
+                format={fmtPct}
+                onChange={(tone) => update(clonePatch(p, { filter: { ...p.filter, tone } }))}
+              />
+              <Knob
                 label="Key"
                 value={p.filter.keyTrack}
                 arm
@@ -486,7 +540,13 @@ export function SynthApp() {
           </Cell>
 
           <Cell title="Amp EG">
-            <EnvKnobs env={p.ampEnv} onChange={(ampEnv) => update(clonePatch(p, { ampEnv }))} />
+            <div className="lyra-knobs lyra-knobs-5">
+              <Knob label="A" value={p.ampEnv.attack} min={0.001} max={4} format={fmtMs} onChange={(attack) => update(clonePatch(p, { ampEnv: { ...p.ampEnv, attack } }))} />
+              <Knob label="D" value={p.ampEnv.decay} min={0.01} max={4} format={fmtMs} onChange={(decay) => update(clonePatch(p, { ampEnv: { ...p.ampEnv, decay } }))} />
+              <Knob label="S" value={p.ampEnv.sustain} format={fmtPct} onChange={(sustain) => update(clonePatch(p, { ampEnv: { ...p.ampEnv, sustain } }))} />
+              <Knob label="R" value={p.ampEnv.release} min={0.01} max={8} format={fmtMs} onChange={(release) => update(clonePatch(p, { ampEnv: { ...p.ampEnv, release } }))} />
+              <Knob label="Vel" value={p.velAmp ?? 0} arm armOn={0.4} format={fmtPct} onChange={(velAmp) => update(clonePatch(p, { velAmp }))} />
+            </div>
           </Cell>
           <Cell title="Filter EG">
             <EnvKnobs env={p.filterEnv} onChange={(filterEnv) => update(clonePatch(p, { filterEnv }))} />
@@ -642,7 +702,7 @@ export function SynthApp() {
                 <div key={i} className="lyra-matrix-row">
                   <select
                     aria-label={`Matrix ${i + 1} source`}
-                    className="h-10 min-w-0 rounded-md bg-elevated px-1.5 text-sm text-fg"
+                    className="h-7 min-w-0 rounded-md bg-elevated px-1.5 text-sm text-fg"
                     value={row.src}
                     onChange={(e) => setMatrix(i, { ...row, src: e.target.value as ModSource })}
                   >
@@ -654,11 +714,11 @@ export function SynthApp() {
                   </select>
                   <select
                     aria-label={`Matrix ${i + 1} destination`}
-                    className="h-10 min-w-0 rounded-md bg-elevated px-1.5 text-sm text-fg"
+                    className="h-7 min-w-0 rounded-md bg-elevated px-1.5 text-sm text-fg"
                     value={row.dest}
                     onChange={(e) => setMatrix(i, { ...row, dest: e.target.value as ModDest })}
                   >
-                    {LFO_DEST.map((s) => (
+                    {MATRIX_DEST.map((s) => (
                       <option key={s.id} value={s.id}>
                         {s.label}
                       </option>
@@ -891,6 +951,7 @@ function LfoCell({ title, lfo, onChange }: { title: string; lfo: LfoParams; onCh
             onChange={(rate) => onChange({ ...lfo, rate })}
           />
           <LfoSlider label="Depth" value={lfo.depth} arm format={fmtPct} onChange={(depth) => onChange({ ...lfo, depth })} />
+          <LfoSlider label="Fade" value={lfo.fade ?? 0} arm format={fmtPct} onChange={(fade) => onChange({ ...lfo, fade })} />
         </div>
       </div>
     </Cell>

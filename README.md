@@ -1,16 +1,25 @@
-# LYRA-32 Mk IV.4
+# LYRA-32 Mk IV.5
 
 Hybrid polyphonic web synthesizer by [Raybridge Digital](https://github.com/raybridgedigital).
 
 Play from a class-compliant USB-C MIDI keyboard, the computer keys (A–L), or the on-screen piano. Chrome / Edge / Firefox.
 
-This tag is the restore point **with** the groovebox and the v4.4 factory bank.
+This tag is the restore point **with** the groovebox, 271-patch factory bank, Filter Tone / matrix 6, and era library.
+
+## Mk IV.5 (v4.5)
+
+- Filter plate: 2-row knobs, Tone tilt, live Mod meter + gold needle for CC1/CC74
+- Matrix 6 slots, extra dests (PWM, mix, drive, FX, glide), sources Key/Rnd, LFO S&H + fade-in
+- Unison 1–7, Amp EG Vel
+- 100 era factory sounds (20 each 2022–2026): phonk, Jersey, Brat, Amapiano, botanica, jerk
+- Library A–Z; layer patch menu grouped by category with gold headers
+- 271 factory patches
+- Restore: `git checkout v4.5.0`
 
 ## Mk IV.4 (v4.4)
 
 - Restored the full factory bank (GitHub `main` had truncated `patches.ts`)
 - Five new patches: Rhodes Tine, Vowel Drift, Glide PWM, Mbira Tines, Muted Horn
-- 171 factory patches
 - Restore: `git checkout v4.4.0`
 
 ## Mk IV.3 (v4.3)
@@ -53,7 +62,7 @@ This tag is the restore point **with** the groovebox and the v4.4 factory bank.
 - Sustain + arp no longer latches forever
 - LFO 1 / LFO 2 use aligned Rate / Depth sliders
 - Five extra Lead patches (Howl Super, Air Super, Super Chorus, Wide Chorus, Halo Lead)
-- 171 factory patches in banks (incl. Techno, Strings, Drums)
+- 271 factory patches in banks (incl. Techno, Strings, Drums)
 
 ## Mk III (v3)
 

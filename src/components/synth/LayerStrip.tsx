@@ -1,8 +1,122 @@
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Power } from "lucide-react";
 import { cn } from "@/lib/cn";
 import type { LayerId, Patch } from "@/lib/synth/types";
 import { midiName, waveLine } from "@/lib/synth/stack";
+import { groupByCategory } from "@/lib/synth/patches";
 import { useSynth } from "@/lib/synth/store";
+
+function PatchMenu({
+  id,
+  patches,
+  value,
+  empty,
+  onPick,
+}: {
+  id: LayerId;
+  patches: Patch[];
+  value: string;
+  empty: boolean;
+  onPick: (p: Patch | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState({ top: 0, left: 0 });
+  const root = useRef<HTMLDivElement>(null);
+  const btn = useRef<HTMLButtonElement>(null);
+  const groups = useMemo(() => groupByCategory(patches), [patches]);
+  const current = patches.find((x) => x.id === value);
+
+  const place = () => {
+    const r = btn.current?.getBoundingClientRect();
+    if (!r) return;
+    const left = Math.min(r.left, window.innerWidth - 300);
+    const top = r.bottom + 4;
+    setPos({ top, left: Math.max(8, left) });
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    place();
+    const onDoc = (e: MouseEvent) => {
+      if (root.current && !root.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <div ref={root} className={cn("lyra-patch-menu", open && "is-open")}>
+      <button
+        ref={btn}
+        type="button"
+        className="lyra-layer-name"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={`Layer ${id.toUpperCase()} patch`}
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }}
+      >
+        {empty ? "— off —" : current?.name ?? "Patch"}
+      </button>
+      {open ? (
+        <div
+          className="lyra-patch-pop"
+          role="listbox"
+          aria-label="Patches by category"
+          style={{ top: pos.top, left: pos.left }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {id === "b" ? (
+            <button
+              type="button"
+              role="option"
+              className="lyra-patch-item is-off"
+              onClick={() => {
+                onPick(null);
+                setOpen(false);
+              }}
+            >
+              — off —
+            </button>
+          ) : null}
+          {groups.map((g) => (
+            <div key={g.category} className="lyra-patch-group">
+              <div className="lyra-patch-group-h">{g.category}</div>
+              {g.patches.map((x) => (
+                <button
+                  key={x.id}
+                  type="button"
+                  role="option"
+                  aria-selected={x.id === value}
+                  className={cn("lyra-patch-item", x.id === value && "is-on")}
+                  onClick={() => {
+                    onPick(x);
+                    setOpen(false);
+                  }}
+                >
+                  {x.name}
+                </button>
+              ))}
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 function LayerCard({
   id,
@@ -38,29 +152,20 @@ function LayerCard({
     >
       <div className="lyra-layer-top">
         <span className="lyra-layer-id">{id.toUpperCase()}</span>
-        <select
-          aria-label={`Layer ${id.toUpperCase()} patch`}
-          className="lyra-layer-name"
+        <PatchMenu
+          id={id}
+          patches={patches}
           value={empty ? "" : patch.id}
-          onClick={(e) => e.stopPropagation()}
-          onChange={(e) => {
-            const found = patches.find((x) => x.id === e.target.value);
-            if (!found) return;
+          empty={empty}
+          onPick={(found) => {
+            if (!found) {
+              if (id === "b") setLayerOn("b", false);
+              return;
+            }
             selectLayer(id);
             loadPatch(found);
           }}
-        >
-          {id === "b" && (
-            <option value="" disabled>
-              — off —
-            </option>
-          )}
-          {patches.map((x) => (
-            <option key={x.id} value={x.id}>
-              {x.name}
-            </option>
-          ))}
-        </select>
+        />
         <button
           type="button"
           className={cn("lyra-layer-power", mix.on && "is-on")}

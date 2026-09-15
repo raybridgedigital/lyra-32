@@ -1,4 +1,4 @@
-import type { LfoDest, LfoParams, Patch, Waveform } from "./types";
+import type { LfoWave, ModDest, Patch, Waveform } from "./types";
 import type { ArpStep } from "./arp";
 import { midiToFreq } from "./midi";
 import { INIT_PATCH, clonePatch } from "./patches";
@@ -134,8 +134,18 @@ function makeAudioContext(): AudioContext {
   }
 }
 
-type LfoBank = { lfo1: OscillatorNode; lfo2: OscillatorNode; drift: OscillatorNode };
+type LfoBank = {
+  lfo1: OscillatorNode;
+  lfo2: OscillatorNode;
+  drift: OscillatorNode;
+  sh1: ConstantSourceNode;
+  sh2: ConstantSourceNode;
+};
 type DcBank = { mod: ConstantSourceNode; at: ConstantSourceNode };
+
+function oscLfoType(wave: LfoWave): OscillatorType {
+  return wave === "samplehold" ? "square" : wave;
+}
 
 class Voice {
   midi: number;
@@ -153,6 +163,13 @@ class Voice {
   private mix: GainNode;
   private pan: StereoPannerNode;
   private fmGain: GainNode | null = null;
+  private osc1Mix: GainNode | null = null;
+  private osc2Mix: GainNode | null = null;
+  private driveIn: GainNode | null = null;
+  private fxSend: GainNode | null = null;
+  private toneLo: BiquadFilterNode | null = null;
+  private toneHi: BiquadFilterNode | null = null;
+  private glideBias = 0;
   private dead = false;
   private onEnded: () => void;
   private releaseTimer: number | null = null;
@@ -194,6 +211,8 @@ class Voice {
     const shaper = ctx.createWaveShaper();
     shaper.curve = tanhCurve(patch.drive) as Float32Array<ArrayBuffer>;
     shaper.oversample = "none";
+    this.driveIn = ctx.createGain();
+    this.driveIn.gain.setValueAtTime(1, now);
 
     const f1 = ctx.createBiquadFilter();
     f1.type = patch.filter.type;
@@ -220,10 +239,26 @@ class Voice {
       );
     }
 
-    this.mix.connect(shaper);
+    const toneAmt = clamp(Number.isFinite(patch.filter.tone) ? (patch.filter.tone as number) : 0.5, 0, 1);
+    const toneLo = ctx.createBiquadFilter();
+    toneLo.type = "lowshelf";
+    toneLo.frequency.setValueAtTime(280, now);
+    toneLo.gain.setValueAtTime((0.5 - toneAmt) * 10, now);
+    const toneHi = ctx.createBiquadFilter();
+    toneHi.type = "highshelf";
+    toneHi.frequency.setValueAtTime(2400, now);
+    toneHi.gain.setValueAtTime((toneAmt - 0.5) * 12, now);
+    this.toneLo = toneLo;
+    this.toneHi = toneHi;
+    this.extras.push(toneLo, toneHi);
+
+    this.mix.connect(this.driveIn);
+    this.driveIn.connect(shaper);
     shaper.connect(this.filters[0]!);
     for (let i = 0; i < this.filters.length - 1; i++) this.filters[i]!.connect(this.filters[i + 1]!);
-    this.filters[this.filters.length - 1]!.connect(this.vca);
+    this.filters[this.filters.length - 1]!.connect(toneLo);
+    toneLo.connect(toneHi);
+    toneHi.connect(this.vca);
     this.vca.connect(this.pan);
     this.pan.connect(this.expr);
     this.layerAmp = ctx.createGain();
@@ -231,10 +266,29 @@ class Voice {
     this.pan.pan.setValueAtTime(clamp(layer?.pan ?? 0, -1, 1), now);
     this.expr.connect(this.layerAmp);
     this.layerAmp.connect(dest);
+    this.fxSend = ctx.createGain();
+    this.fxSend.gain.setValueAtTime(0, now);
+    this.vca.connect(this.fxSend);
+    this.fxSend.connect(dest);
 
-    const uni = patch.unison.voices;
-    this.spawnOsc(patch, "osc1", midi, bend, now, uni);
-    this.spawnOsc(patch, "osc2", midi, bend, now, uni);
+    const uni = Math.max(1, Math.min(7, patch.unison.voices || 1));
+    const keyVal = clamp((midi - 60) / 48, -1, 1);
+    const randVal = Math.random() * 2 - 1;
+    let pwmBias = 0;
+    for (const row of patch.matrix ?? []) {
+      if (row.dest !== "pwm" || Math.abs(row.amount) < 0.01) continue;
+      if (row.src === "vel") pwmBias += row.amount * (velocity - 0.5);
+      else if (row.src === "key") pwmBias += row.amount * keyVal * 0.5;
+      else if (row.src === "rand") pwmBias += row.amount * randVal * 0.5;
+    }
+    for (const row of patch.matrix ?? []) {
+      if (row.dest !== "glide" || Math.abs(row.amount) < 0.01) continue;
+      if (row.src === "vel") this.glideBias += row.amount * (velocity - 0.5);
+      else if (row.src === "key") this.glideBias += row.amount * keyVal * 0.5;
+      else if (row.src === "rand") this.glideBias += row.amount * randVal * 0.5;
+    }
+    this.spawnOsc(patch, "osc1", midi, bend, now, uni, pwmBias);
+    this.spawnOsc(patch, "osc2", midi, bend, now, uni, pwmBias * 0.7);
 
     if (patch.subLevel > 0.001) {
       const sub = ctx.createOscillator();
@@ -310,8 +364,8 @@ class Voice {
       this.extras.push(g);
     }
 
-    this.routeLfo(lfos.lfo1, patch.lfo, 1);
-    this.routeLfo(lfos.lfo2, patch.lfo2, 1);
+    this.routeLfo(lfos.lfo1, patch.lfo, 1, lfos.sh1);
+    this.routeLfo(lfos.lfo2, patch.lfo2, 1, lfos.sh2);
 
     const velDc = ctx.createConstantSource();
     velDc.offset.value = clamp(velocity, 0, 1);
@@ -330,17 +384,31 @@ class Voice {
     this.extras.push(fenv);
     this.sources.push(fenv);
 
+    const keyDc = ctx.createConstantSource();
+    keyDc.offset.value = keyVal;
+    keyDc.start(now);
+    this.extras.push(keyDc);
+    this.sources.push(keyDc);
+    const randDc = ctx.createConstantSource();
+    randDc.offset.value = randVal;
+    randDc.start(now);
+    this.extras.push(randDc);
+    this.sources.push(randDc);
+
     for (const row of patch.matrix ?? []) {
       if (Math.abs(row.amount) < 0.01) continue;
-      if (row.src === "lfo1") this.routeLfo(lfos.lfo1, { ...patch.lfo, dest: row.dest, depth: row.amount }, 1);
-      else if (row.src === "lfo2") this.routeLfo(lfos.lfo2, { ...patch.lfo2, dest: row.dest, depth: row.amount }, 1);
+      if (row.src === "lfo1") this.routeLfo(lfos.lfo1, { ...patch.lfo, dest: row.dest, depth: row.amount }, 1, lfos.sh1);
+      else if (row.src === "lfo2") this.routeLfo(lfos.lfo2, { ...patch.lfo2, dest: row.dest, depth: row.amount }, 1, lfos.sh2);
       else if (row.src === "mod") this.routeDc(dc.mod, row.dest, row.amount);
       else if (row.src === "at") this.routeDc(dc.at, row.dest, row.amount);
       else if (row.src === "vel") this.routeDc(velDc, row.dest, row.amount);
       else if (row.src === "fenv") this.routeDc(fenv, row.dest, row.amount);
+      else if (row.src === "key") this.routeDc(keyDc, row.dest, row.amount);
+      else if (row.src === "rand") this.routeDc(randDc, row.dest, row.amount);
     }
 
-    const peak = vel * 0.38;
+    const velAmp = Number.isFinite(patch.velAmp) ? (patch.velAmp as number) : 0;
+    const peak = vel * 0.38 * (1 - velAmp * 0.45 + velAmp * velocity);
     const a = Math.max(0.003, patch.ampEnv.attack);
     const d = Math.max(0.01, patch.ampEnv.decay);
     const s = Math.max(0.0001, patch.ampEnv.sustain * peak);
@@ -349,43 +417,54 @@ class Voice {
     this.vca.gain.setTargetAtTime(s, now + a, d / 3);
   }
 
-  private routeLfo(lfo: OscillatorNode, spec: LfoParams, scale: number) {
+  private routeLfo(lfo: AudioNode, spec: { dest: ModDest; depth: number; fade?: number; wave?: LfoWave }, scale: number, sh?: ConstantSourceNode) {
     const depth = (spec?.depth ?? 0) * scale;
     if (!spec || Math.abs(depth) < 0.008) return;
+    const src = spec.wave === "samplehold" && sh ? sh : lfo;
     const ctx = this.ctx;
-    const g = ctx.createGain();
-    const dest: LfoDest = spec.dest ?? "cutoff";
+    const now = this.startedAt;
+    const fade = Math.max(0, spec.fade ?? 0) * 2.4;
+    const connectScaled = (param: AudioParam, mag: number) => {
+      const g = ctx.createGain();
+      const target = depth * mag;
+      if (fade > 0.03) {
+        g.gain.setValueAtTime(0, now);
+        g.gain.linearRampToValueAtTime(target, now + fade);
+      } else {
+        g.gain.value = target;
+      }
+      src.connect(g);
+      g.connect(param);
+      this.extras.push(g);
+    };
+    const dest: ModDest = spec.dest ?? "cutoff";
     if (dest === "cutoff") {
-      g.gain.value = depth * 2400;
-      lfo.connect(g);
-      for (const f of this.filters) g.connect(f.detune);
+      for (const f of this.filters) connectScaled(f.detune, 2400);
     } else if (dest === "pitch") {
-      g.gain.value = depth * 40;
-      lfo.connect(g);
-      for (const o of this.oscs) g.connect(o.detune);
+      for (const o of this.oscs) connectScaled(o.detune, 40);
     } else if (dest === "pan") {
-      g.gain.value = depth * 0.75;
-      lfo.connect(g);
-      g.connect(this.pan.pan);
+      connectScaled(this.pan.pan, 0.75);
     } else if (dest === "amp") {
-      g.gain.value = depth * 0.22;
-      lfo.connect(g);
-      g.connect(this.vca.gain);
+      connectScaled(this.vca.gain, 0.22);
     } else if (dest === "res") {
-      g.gain.value = depth * 10;
-      lfo.connect(g);
-      for (const f of this.filters) g.connect(f.Q);
+      for (const f of this.filters) connectScaled(f.Q, 10);
     } else if (dest === "fm" && this.fmGain) {
-      g.gain.value = depth * 800;
-      lfo.connect(g);
-      g.connect(this.fmGain.gain);
+      connectScaled(this.fmGain.gain, 800);
+    } else if (dest === "oscMix") {
+      if (this.osc1Mix) connectScaled(this.osc1Mix.gain, -0.45);
+      if (this.osc2Mix) connectScaled(this.osc2Mix.gain, 0.45);
+    } else if (dest === "drive" && this.driveIn) {
+      connectScaled(this.driveIn.gain, 0.85);
+    } else if (dest === "fx" && this.fxSend) {
+      connectScaled(this.fxSend.gain, 0.4);
+    } else if (dest === "pwm") {
+      for (const o of this.osc1s) connectScaled(o.detune, 18);
     } else {
       return;
     }
-    this.extras.push(g);
   }
 
-  private routeDc(src: ConstantSourceNode, dest: LfoDest, amount: number) {
+  private routeDc(src: ConstantSourceNode, dest: ModDest, amount: number) {
     if (Math.abs(amount) < 0.01) return;
     const g = this.ctx.createGain();
     if (dest === "cutoff") {
@@ -412,13 +491,36 @@ class Voice {
       g.gain.value = amount * 1400;
       src.connect(g);
       g.connect(this.fmGain.gain);
+    } else if (dest === "oscMix") {
+      g.gain.value = amount * 0.5;
+      src.connect(g);
+      if (this.osc2Mix) g.connect(this.osc2Mix.gain);
+      const g2 = this.ctx.createGain();
+      g2.gain.value = amount * -0.5;
+      src.connect(g2);
+      if (this.osc1Mix) g2.connect(this.osc1Mix.gain);
+      this.extras.push(g2);
+    } else if (dest === "drive" && this.driveIn) {
+      g.gain.value = amount * 1.1;
+      src.connect(g);
+      g.connect(this.driveIn.gain);
+    } else if (dest === "fx" && this.fxSend) {
+      g.gain.value = amount * 0.55;
+      src.connect(g);
+      g.connect(this.fxSend.gain);
+    } else if (dest === "pwm") {
+      g.gain.value = amount * 22;
+      src.connect(g);
+      for (const o of this.osc1s) g.connect(o.detune);
+    } else if (dest === "glide") {
+      return;
     } else {
       return;
     }
     this.extras.push(g);
   }
 
-  private spawnOsc(patch: Patch, which: "osc1" | "osc2", midi: number, bend: number, now: number, uni: number) {
+  private spawnOsc(patch: Patch, which: "osc1" | "osc2", midi: number, bend: number, now: number, uni: number, pwmBias = 0) {
     const p = patch[which];
     if ((p.level ?? 0) < 0.001) return;
     const ctx = this.ctx;
@@ -438,9 +540,12 @@ class Voice {
     const g = ctx.createGain();
     g.gain.value = (p.level / Math.sqrt(copies)) * 0.9;
     g.connect(this.mix);
+    if (which === "osc1") this.osc1Mix = g;
+    else this.osc2Mix = g;
+    const pwm = clamp(p.pwm + pwmBias, 0.05, 0.95);
     for (let i = 0; i < copies; i++) {
       const o = ctx.createOscillator();
-      applyWave(ctx, o, p.wave, p.pwm);
+      applyWave(ctx, o, p.wave, pwm);
       o.frequency.setValueAtTime(freq, now);
       o.detune.setValueAtTime(detunes[i] ?? 0, now);
       const pan = ctx.createStereoPanner();
@@ -480,11 +585,22 @@ class Voice {
     }
   }
 
+  setTone(tone: number, when: number) {
+    if (!this.toneLo || !this.toneHi) return;
+    const t = Number.isFinite(tone) ? clamp(tone, 0, 1) : 0.5;
+    try {
+      this.toneLo.gain.setTargetAtTime((0.5 - t) * 10, when, 0.04);
+      this.toneHi.gain.setTargetAtTime((t - 0.5) * 12, when, 0.04);
+    } catch {
+      /* closed */
+    }
+  }
+
   glideTo(midi: number, bend: number, patch: Patch, when: number, portamento: boolean) {
     this.midi = midi;
     this.bend = bend;
     this.patchSnap = patch;
-    const glide = patch.glide ?? 0;
+    const glide = Math.max(0, (patch.glide ?? 0) * (1 + this.glideBias));
     const usePorta = portamento && glide > 0.01;
     const dur = usePorta ? Math.max(0.03, glide * 1.15) : 0.006;
     const retune = (o: OscillatorNode, note: number, fine: number) => {
@@ -659,6 +775,10 @@ export class LyraEngine {
   private grooveNow = 0;
   private grooveTickAt = 0;
   private groovePlaying = false;
+  private shTimer: number | null = null;
+  private shAcc1 = 0;
+  private shAcc2 = 0;
+  private shLast = 0;
   private seqVoices: Voice[] = [];
   private seqByTrack: Voice[][] = [[], [], [], []];
   private clipTimers: number[] = [];
@@ -796,7 +916,14 @@ export class LyraEngine {
     drift.type = "sine";
     drift.frequency.value = 0.11;
     drift.start();
-    this.lfos = { lfo1, lfo2, drift };
+    const sh1 = ctx.createConstantSource();
+    sh1.offset.value = 0;
+    sh1.start();
+    const sh2 = ctx.createConstantSource();
+    sh2.offset.value = 0;
+    sh2.start();
+    this.lfos = { lfo1, lfo2, drift, sh1, sh2 };
+    this.startShClock();
 
     const mod = ctx.createConstantSource();
     mod.offset.value = 0;
@@ -820,6 +947,42 @@ export class LyraEngine {
     return this.ctx.state === "running";
   }
 
+  private startShClock() {
+    if (this.shTimer != null) return;
+    this.shLast = performance.now();
+    const tick = () => {
+      const t = performance.now();
+      const dt = Math.min(0.05, (t - this.shLast) / 1000);
+      this.shLast = t;
+      const p = this.patch;
+      const now = this.ctx.currentTime;
+      if (p.lfo.wave === "samplehold") {
+        this.shAcc1 += dt * clamp(p.lfo.rate, 0.05, 30);
+        if (this.shAcc1 >= 1) {
+          this.shAcc1 %= 1;
+          try {
+            this.lfos.sh1.offset.setValueAtTime(Math.random() * 2 - 1, now);
+          } catch {
+            /* */
+          }
+        }
+      }
+      if (p.lfo2.wave === "samplehold") {
+        this.shAcc2 += dt * clamp(p.lfo2.rate, 0.05, 30);
+        if (this.shAcc2 >= 1) {
+          this.shAcc2 %= 1;
+          try {
+            this.lfos.sh2.offset.setValueAtTime(Math.random() * 2 - 1, now);
+          } catch {
+            /* */
+          }
+        }
+      }
+      this.shTimer = window.setTimeout(tick, 16);
+    };
+    tick();
+  }
+
   applyPatch(p: Patch) {
     this.patch = clonePatch(p);
     const now = this.ctx.currentTime;
@@ -832,14 +995,23 @@ export class LyraEngine {
     this.buses.phaserGain.gain.setTargetAtTime((fx.phaserMix ?? 0) * 0.65, now, 0.04);
     this.buses.master.gain.setTargetAtTime(this.muted ? 0 : clamp(this.patch.master, 0, 1), now, 0.03);
     this.lfos.lfo1.frequency.setTargetAtTime(clamp(this.patch.lfo.rate, 0.02, 30), now, 0.02);
-    this.lfos.lfo1.type = this.patch.lfo.wave;
+    try {
+      this.lfos.lfo1.type = oscLfoType(this.patch.lfo.wave);
+    } catch {
+      /* */
+    }
     this.lfos.lfo2.frequency.setTargetAtTime(clamp(this.patch.lfo2.rate, 0.02, 30), now, 0.02);
-    this.lfos.lfo2.type = this.patch.lfo2.wave;
-    const q = 0.2 + this.patch.filter.resonance * 18;
+    try {
+      this.lfos.lfo2.type = oscLfoType(this.patch.lfo2.wave);
+    } catch {
+      /* */
+    }
     for (const v of this.voices) {
-      const p = v.patchSnap;
-      const hz = cutoffHz(p.filter.cutoff + this.cutoffMod * 0.35, p.filter.keyTrack, v.midi);
-      v.setCutoff(hz, 0.2 + p.filter.resonance * 18, now);
+      const live =
+        v.layer === "b" ? this.stack.b.patch : v.layer === "a" ? this.stack.a.patch : v.patchSnap;
+      const hz = cutoffHz(live.filter.cutoff + this.cutoffMod * 0.35, live.filter.keyTrack, v.midi);
+      v.setCutoff(hz, 0.2 + live.filter.resonance * 18, now);
+      v.setTone(live.filter.tone ?? 0.5, now);
     }
     if (this.patch.arp.on) {
       this.absorbHeldIntoArp();
@@ -870,7 +1042,8 @@ export class LyraEngine {
     const now = this.ctx.currentTime;
     this.dc.mod.offset.setTargetAtTime(this.cutoffMod, now, 0.03);
     for (const vo of this.voices) {
-      const p = vo.patchSnap;
+      const p =
+        vo.layer === "b" ? this.stack.b.patch : vo.layer === "a" ? this.stack.a.patch : vo.patchSnap;
       const hz = cutoffHz(p.filter.cutoff + this.cutoffMod * 0.4, p.filter.keyTrack, vo.midi);
       vo.setCutoff(hz, 0.2 + p.filter.resonance * 18, now);
     }

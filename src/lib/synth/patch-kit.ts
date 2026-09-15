@@ -1,4 +1,4 @@
-import type { LfoParams, ModRoute, OscParams, Patch } from "./types";
+import type { LfoParams, ModRoute, OscParams, Patch, UniVoices } from "./types";
 import { defaultArpSteps, normalizeArpSteps } from "./arp";
 import { defaultGroove, normalizeGroove } from "./groove";
 
@@ -17,6 +17,7 @@ export const defaultLfo2 = (): LfoParams => ({
   depth: 0,
   dest: "pan",
   wave: "triangle",
+  fade: 0,
 });
 
 export const emptyMatrix = (): ModRoute[] => [
@@ -24,14 +25,20 @@ export const emptyMatrix = (): ModRoute[] => [
   { src: "lfo2", dest: "pitch", amount: 0 },
   { src: "fenv", dest: "cutoff", amount: 0 },
   { src: "vel", dest: "amp", amount: 0 },
+  { src: "key", dest: "cutoff", amount: 0 },
+  { src: "rand", dest: "pitch", amount: 0 },
 ];
 
-export const mx = (
-  a: ModRoute,
-  b: ModRoute,
-  c: ModRoute,
-  d: ModRoute,
-): ModRoute[] => [a, b, c, d];
+export const mx = (...rows: ModRoute[]): ModRoute[] =>
+  emptyMatrix().map((slot, i) => {
+    const r = rows[i];
+    if (!r) return slot;
+    return {
+      src: r.src ?? slot.src,
+      dest: r.dest ?? slot.dest,
+      amount: Number.isFinite(r.amount) ? r.amount : 0,
+    };
+  });
 
 type PatchIn = Omit<Partial<Patch>, "osc1" | "osc2" | "fx" | "lfo2" | "matrix" | "arp"> & {
   id: string;
@@ -55,11 +62,12 @@ export function patch(partial: PatchIn): Patch {
     sync: 0,
     drift: 0,
     velFilt: 0,
+    velAmp: 0,
     drive: 0.1,
-    filter: { type: "lowpass", slope: 24, cutoff: 0.55, resonance: 0.18, envAmount: 0.25, keyTrack: 0.3 },
+    filter: { type: "lowpass", slope: 24, cutoff: 0.55, resonance: 0.18, envAmount: 0.25, keyTrack: 0.3, tone: 0.5 },
     ampEnv: { attack: 0.01, decay: 0.25, sustain: 0.65, release: 0.25 },
     filterEnv: { attack: 0.01, decay: 0.22, sustain: 0.3, release: 0.2 },
-    lfo: { rate: 0.35, depth: 0.08, dest: "cutoff", wave: "sine" },
+    lfo: { rate: 0.35, depth: 0.08, dest: "cutoff", wave: "sine", fade: 0 },
     lfo2: defaultLfo2(),
     matrix: emptyMatrix(),
     fx: { delayMix: 0.12, delayTime: 0.28, delayFeedback: 0.28, reverbMix: 0.18, chorusMix: 0.08, phaserMix: 0 },
@@ -111,8 +119,24 @@ export function normalizePatch(p: Patch): Patch {
     sync: p.sync ?? 0,
     drift: p.drift ?? 0,
     velFilt: p.velFilt ?? 0,
-    lfo2: { ...defaultLfo2(), ...p.lfo2 },
+    velAmp: Number.isFinite(p.velAmp) ? p.velAmp : 0,
+    lfo: { ...p.lfo, fade: Number.isFinite(p.lfo?.fade) ? p.lfo.fade : 0 },
+    lfo2: { ...defaultLfo2(), ...p.lfo2, fade: Number.isFinite(p.lfo2?.fade) ? p.lfo2.fade : 0 },
     matrix,
+    filter: {
+      type: p.filter?.type ?? "lowpass",
+      slope: p.filter?.slope === 12 ? 12 : 24,
+      cutoff: Number.isFinite(p.filter?.cutoff) ? p.filter.cutoff : 0.55,
+      resonance: Number.isFinite(p.filter?.resonance) ? p.filter.resonance : 0.18,
+      envAmount: Number.isFinite(p.filter?.envAmount) ? p.filter.envAmount : 0.25,
+      keyTrack: Number.isFinite(p.filter?.keyTrack) ? p.filter.keyTrack : 0.3,
+      tone: Number.isFinite(p.filter?.tone) ? p.filter.tone : 0.5,
+    },
+    unison: {
+      voices: (Math.max(1, Math.min(7, Math.round(p.unison?.voices ?? 1))) || 1) as UniVoices,
+      detune: Number.isFinite(p.unison?.detune) ? p.unison.detune : 0.1,
+      spread: Number.isFinite(p.unison?.spread) ? p.unison.spread : 0.3,
+    },
     fx: {
       delayMix: p.fx?.delayMix ?? 0.12,
       delayTime: p.fx?.delayTime ?? 0.28,
@@ -180,12 +204,17 @@ export function clonePatch(p: Patch, over: Partial<Patch> = {}): Patch {
     sync: over.sync ?? p.sync,
     drift: over.drift ?? p.drift,
     velFilt: over.velFilt ?? p.velFilt,
+    velAmp: over.velAmp ?? p.velAmp,
   } as Patch);
 }
 
-type Draft = Omit<Patch, "id" | "name" | "category" | "osc1" | "osc2"> & {
+type Draft = Omit<Patch, "id" | "name" | "category" | "osc1" | "osc2" | "filter" | "lfo" | "lfo2" | "velAmp"> & {
   osc1?: Partial<OscParams>;
   osc2?: Partial<OscParams>;
+  velAmp?: number;
+  filter: Omit<Patch["filter"], "tone"> & { tone?: number };
+  lfo: Omit<LfoParams, "fade"> & { fade?: number };
+  lfo2: Partial<LfoParams>;
 };
 
 const arpOff = {
@@ -214,6 +243,11 @@ export const CATEGORY_ORDER = [
   "Techno",
   "Drums",
   "FX",
+  "2022",
+  "2023",
+  "2024",
+  "2025",
+  "2026",
 ] as const;
 
 const v2 = {
@@ -221,6 +255,7 @@ const v2 = {
   sync: 0,
   drift: 0,
   velFilt: 0,
+  velAmp: 0,
   lfo2: defaultLfo2(),
   matrix: emptyMatrix(),
 };
@@ -579,16 +614,17 @@ export function P(category: string, id: string, name: string, over: Over = {}): 
     sync: over.sync ?? d.sync,
     drift: over.drift ?? d.drift,
     velFilt: over.velFilt ?? d.velFilt,
+    velAmp: over.velAmp ?? d.velAmp ?? 0,
     drive: over.drive ?? d.drive,
     glide: over.glide ?? d.glide,
     polyMode: over.polyMode ?? d.polyMode,
     master: over.master ?? d.master,
     osc1: osc({ ...d.osc1, ...over.osc1 }),
     osc2: osc({ ...d.osc2, ...over.osc2 }),
-    filter: { ...d.filter, ...over.filter },
+    filter: { ...d.filter, ...over.filter } as Patch["filter"],
     ampEnv: { ...d.ampEnv, ...over.ampEnv },
     filterEnv: { ...d.filterEnv, ...over.filterEnv },
-    lfo: { ...d.lfo, ...over.lfo },
+    lfo: { fade: 0, ...d.lfo, ...over.lfo },
     lfo2: { ...d.lfo2, ...over.lfo2 },
     matrix: (over.matrix as ModRoute[] | undefined) ?? d.matrix,
     fx: { ...d.fx, ...over.fx },
