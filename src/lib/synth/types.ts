@@ -20,6 +20,7 @@ export type ArpRate = "1/4" | "1/8" | "1/8t" | "1/16" | "1/16t";
 export type ModSource = "lfo1" | "lfo2" | "fenv" | "vel" | "mod" | "at" | "key" | "rand";
 export type ModDest = LfoDest | "pwm" | "oscMix" | "drive" | "fx" | "glide";
 export type UniVoices = 1 | 2 | 3 | 4 | 5 | 6 | 7;
+export type WtWarp = "bend" | "sync" | "mirror" | "fold" | "quant";
 
 export type OscParams = {
   wave: Waveform;
@@ -28,6 +29,12 @@ export type OscParams = {
   fine: number;
   level: number;
   pwm: number;
+  table?: string;
+  wtWarp?: number;
+  wtWarpMode?: WtWarp;
+  wtFormant?: number;
+  wtTone?: number;
+  wtPhase?: number;
 };
 
 export type LfoParams = { rate: number; depth: number; dest: LfoDest; wave: LfoWave; fade?: number };

@@ -1,10 +1,18 @@
-# LYRA-32 Mk IV.5
+# LYRA-32 Mk IV.6
 
 Hybrid polyphonic web synthesizer by [Raybridge Digital](https://github.com/raybridgedigital).
 
 Play from a class-compliant USB-C MIDI keyboard, the computer keys (A–L), or the on-screen piano. Chrome / Edge / Firefox.
 
-This tag is the restore point **with** the groovebox, 271-patch factory bank, Filter Tone / matrix 6, and era library.
+This tag is the restore point **with** the wavetable plate, 12 real tables, and Serum-style warp.
+
+## Mk IV.6 (v4.6)
+
+- Wavetable plate (full width, under Pattern): 12 tables, stacked-frame view, triggered live scope
+- Warp modes Bend / Sync / Mirror / Fold / Quant, plus Formant, Tone, Phase
+- Header scope: filled 2-cycle triggered wave
+- Filter Cut mod meter sits with the Cut knob
+- Restore: `git checkout v4.6.0`
 
 ## Mk IV.5 (v4.5)
 

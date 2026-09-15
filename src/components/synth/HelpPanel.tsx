@@ -221,8 +221,9 @@ function SoundTab() {
     <>
       <H>Oscillators</H>
       <P>
-        Osc 1 and Osc 2: Sine, Tri, Saw, Square, Pulse (width = PWM), Super (7-detuned saws), Table (wavetable morph via PWM).
-        Oct / Semi / Fine / Level. Osc 2 Fine of a few cents is the classic beating chorus.
+        Osc 1 and Osc 2: Sine, Tri, Saw, Square, Pulse (width = PWM), Super (7-detuned saws), Table (wavetable).
+        The Wavetable plate: pick a table, scan with Pos. Warp (Bend / Sync / Flip / Fold / Bit) is Serum-style.
+        Form shifts the formant, Tone tilts the spectrum, Phase rotates the cycle. PWM on the osc is Pos when Tbl is on.
       </P>
       <H>Mixer</H>
       <Ul
@@ -379,7 +380,7 @@ function AboutTab() {
     <>
       <H>LYRA-32</H>
       <P>
-        by Ray Bridge Digital · Mk IV.5 · Version 4.5. 32-voice hybrid synthesizer for Chrome, Edge, and Firefox. Dual
+        by Ray Bridge Digital · Mk IV.6 · Version 4.6. 32-voice hybrid synthesizer for Chrome, Edge, and Firefox. Dual
         oscillator + sub + noise, dual LFO, 6-slot matrix, FX rack, arpeggiator with 16-step pattern, two-layer stack /
         split, and a groovebox (4 MIDI takes + 8-lane drums). USB-C MIDI, computer keys, or the on-screen piano. Not a
         VST/AU — DAW mode uses IAC MIDI.

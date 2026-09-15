@@ -41,6 +41,7 @@ import { PatternBar } from "./PatternBar";
 import { GrooveBar } from "./GrooveBar";
 import { AmtFader, Knob, LfoSlider, Seg } from "./Knob";
 import { Scope } from "./Scope";
+import { WavetablePlate } from "./WavetablePlate";
 
 function fmtHz(v: number) {
   const hz = 20 * Math.pow(1000, v);
@@ -328,7 +329,7 @@ export function SynthApp() {
 
       <LayerStrip patches={allPatches} />
 
-      <main className="flex min-h-0 w-full flex-1 flex-col px-1 py-1 sm:px-2">
+      <main className="flex w-full flex-col px-1 py-1 sm:px-2">
         <div className={cn("lyra-face", showKeys && "keys-on")}>
           <Cell title="Oscillator 1">
             <Seg value={p.osc1.wave} options={WAVES} onChange={(wave) => update(clonePatch(p, { osc1: { ...p.osc1, wave } }))} />
@@ -732,6 +733,7 @@ export function SynthApp() {
         </div>
 
         <PatternBar patch={p} playhead={arpStep} onChange={update} />
+        <WavetablePlate patch={p} onChange={update} />
         <GrooveBar />
 
         <section className="lyra-lib mt-3 rounded-xl bg-surface p-4">

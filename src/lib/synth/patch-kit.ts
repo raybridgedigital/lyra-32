@@ -1,6 +1,7 @@
 import type { LfoParams, ModRoute, OscParams, Patch, UniVoices } from "./types";
 import { defaultArpSteps, normalizeArpSteps } from "./arp";
 import { defaultGroove, normalizeGroove } from "./groove";
+import { isWtId } from "./wavetable";
 
 export const osc = (over: Partial<OscParams> = {}): OscParams => ({
   wave: "sawtooth",
@@ -9,6 +10,12 @@ export const osc = (over: Partial<OscParams> = {}): OscParams => ({
   fine: 0,
   level: 0.8,
   pwm: 0.5,
+  table: "classic",
+  wtWarp: 0,
+  wtWarpMode: "bend",
+  wtFormant: 0.5,
+  wtTone: 0.5,
+  wtPhase: 0,
   ...over,
 });
 
@@ -145,8 +152,8 @@ export function normalizePatch(p: Patch): Patch {
       chorusMix: p.fx?.chorusMix ?? 0.08,
       phaserMix: p.fx?.phaserMix ?? 0,
     },
-    osc1: osc(p.osc1),
-    osc2: osc(p.osc2 ?? { level: 0 }),
+    osc1: osc({ ...p.osc1, table: isWtId(p.osc1?.table) ? p.osc1.table : "classic" }),
+    osc2: osc({ ...(p.osc2 ?? { level: 0 }), table: isWtId(p.osc2?.table) ? p.osc2.table : "classic" }),
     arp: {
       on: Boolean(p.arp?.on),
       hold: Boolean(p.arp?.hold),

@@ -3,7 +3,7 @@ import { AuthProvider } from "@/lib/auth/provider";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import appCss from "../styles.css?url";
 
-const APP_NAME = "LYRA-32 Mk IV.5";
+const APP_NAME = "LYRA-32 Mk IV.6";
 
 export const Route = createRootRoute({
   head: () => ({
@@ -15,7 +15,7 @@ export const Route = createRootRoute({
       {
         name: "description",
         content:
-          "LYRA-32 Mk IV.5 hybrid flagship synthesizer. Dual LFO, mod matrix, groovebox, DAW clock, ring/sync, phaser. USB-C MIDI, computer keys, or on-screen piano.",
+          "LYRA-32 Mk IV.6 hybrid flagship synthesizer. Wavetable plate, dual LFO, mod matrix, groovebox, DAW clock, ring/sync, phaser. USB-C MIDI, computer keys, or on-screen piano.",
       },
     ],
     links: [

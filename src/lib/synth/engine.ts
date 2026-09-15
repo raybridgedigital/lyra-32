@@ -1,10 +1,11 @@
-import type { LfoWave, ModDest, Patch, Waveform } from "./types";
+import type { LfoWave, ModDest, OscParams, Patch, Waveform } from "./types";
 import type { ArpStep } from "./arp";
 import { midiToFreq } from "./midi";
 import { INIT_PATCH, clonePatch } from "./patches";
 import { layersForNote, type EngineLayer, type EngineStack } from "./stack";
 import { DRUM_PARTS, defaultGroove, stepsOf, type DrumPart } from "./groove";
 import { DrumVoice } from "./drums";
+import { wtPeriodic, shapeFromOsc, type WtShape } from "./wavetable";
 
 const MAX_VOICES = 32;
 const SUPERSAW_DETUNE = [-11, -7, -3, 0, 3, 7, 11];
@@ -545,7 +546,7 @@ class Voice {
     const pwm = clamp(p.pwm + pwmBias, 0.05, 0.95);
     for (let i = 0; i < copies; i++) {
       const o = ctx.createOscillator();
-      applyWave(ctx, o, p.wave, pwm);
+      applyWave(ctx, o, p.wave, pwm, p.table, shapeFromOsc(p));
       o.frequency.setValueAtTime(freq, now);
       o.detune.setValueAtTime(detunes[i] ?? 0, now);
       const pan = ctx.createStereoPanner();
@@ -558,6 +559,17 @@ class Voice {
       this.sources.push(o);
       if (which === "osc1") this.osc1s.push(o);
       else this.osc2s.push(o);
+    }
+  }
+
+  setWaveShape(which: "osc1" | "osc2", p: OscParams) {
+    const list = which === "osc1" ? this.osc1s : this.osc2s;
+    for (const o of list) {
+      try {
+        applyWave(this.ctx, o, p.wave, clamp(p.pwm, 0.05, 0.95), p.table, shapeFromOsc(p));
+      } catch {
+        /* closed */
+      }
     }
   }
 
@@ -702,13 +714,13 @@ function noiseBuf(ctx: AudioContext) {
   return b;
 }
 
-function applyWave(ctx: AudioContext, o: OscillatorNode, wave: Waveform, pwm: number) {
+function applyWave(ctx: AudioContext, o: OscillatorNode, wave: Waveform, pwm: number, table?: string, shape?: WtShape) {
   if (wave === "pulse") {
     o.setPeriodicWave(pulseWave(ctx, pwm));
     return;
   }
   if (wave === "wt") {
-    o.setPeriodicWave(wtWave(ctx, pwm));
+    o.setPeriodicWave(wtPeriodic(ctx, table, pwm, shape));
     return;
   }
   if (wave === "supersaw") {
@@ -861,8 +873,8 @@ export class LyraEngine {
     limiter.release.value = 0.12;
 
     const analyser = ctx.createAnalyser();
-    analyser.fftSize = 2048;
-    analyser.smoothingTimeConstant = 0.35;
+    analyser.fftSize = 4096;
+    analyser.smoothingTimeConstant = 0.05;
 
     const drum = ctx.createGain();
     drum.gain.value = 0.95;
@@ -1012,6 +1024,8 @@ export class LyraEngine {
       const hz = cutoffHz(live.filter.cutoff + this.cutoffMod * 0.35, live.filter.keyTrack, v.midi);
       v.setCutoff(hz, 0.2 + live.filter.resonance * 18, now);
       v.setTone(live.filter.tone ?? 0.5, now);
+      v.setWaveShape("osc1", live.osc1);
+      v.setWaveShape("osc2", live.osc2);
     }
     if (this.patch.arp.on) {
       this.absorbHeldIntoArp();
