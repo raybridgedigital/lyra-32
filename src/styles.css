@@ -141,13 +141,13 @@
     grid-column: 1 / -1;
   }
 
-  .lyra-wt {
-    min-height: 26rem;
-    height: 26rem;
+  .lyra-cell.lyra-wt {
+    min-height: 30.5rem;
+    height: 30.5rem;
     margin-top: 6px;
     overflow: hidden;
     border-radius: var(--radius-xl);
-    padding-bottom: 12px;
+    padding-bottom: 14px;
   }
 
   .lyra-wt-body {
@@ -165,6 +165,7 @@
     min-height: 0;
     flex-direction: column;
     overflow: hidden;
+    padding: 5px 0 8px;
     border-radius: 8px;
     background: var(--color-ink);
   }
@@ -182,11 +183,11 @@
     z-index: 1;
     display: flex;
     flex: 1 1 0;
-    min-height: 0;
+    min-height: 1.45rem;
     align-items: center;
     justify-content: flex-end;
     padding: 0 0.55rem;
-    font-size: 0.62rem;
+    font-size: 0.68rem;
     font-weight: 700;
     letter-spacing: 0.12em;
     text-transform: uppercase;
@@ -294,13 +295,13 @@
     width: 100%;
     grid-template-columns: 1fr 1fr;
     justify-items: center;
-    row-gap: 10px;
+    row-gap: 12px;
     column-gap: 8px;
   }
 
   .lyra-wt-side .lyra-knob {
-    width: 3.85rem;
-    height: 3.85rem;
+    width: 4.15rem;
+    height: 4.15rem;
   }
 
   .lyra-wt-side .lyra-arm {
@@ -328,6 +329,138 @@
   .lyra-wt-arm.is-on {
     background: var(--color-accent);
     color: var(--color-accent-fg);
+  }
+
+  .lyra-cell.lyra-shape {
+    height: 21rem;
+    min-height: 21rem;
+    max-height: 21rem;
+    margin-top: 6px;
+    overflow: hidden;
+    border-radius: var(--radius-xl);
+    padding-bottom: 16px;
+  }
+
+  .lyra-shape-body {
+    display: grid;
+    min-height: 0;
+    flex: 1;
+    grid-template-columns: minmax(0, 1fr) 14.5rem;
+    gap: 14px;
+  }
+
+  .lyra-shape-stage {
+    display: flex;
+    min-width: 0;
+    min-height: 0;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .lyra-shape-canvas {
+    display: block;
+    width: 100%;
+    min-height: 0;
+    flex: 1;
+    touch-action: none;
+    cursor: crosshair;
+    border-radius: 8px;
+    background: var(--color-ink);
+  }
+
+  .lyra-shape-presets {
+    display: flex;
+    width: 100%;
+    gap: 5px;
+  }
+
+  .lyra-shape-presets button {
+    flex: 1 1 0;
+    min-width: 0;
+    height: 1.85rem;
+    padding: 0 0.2rem;
+    border-radius: 6px;
+    background: var(--color-elevated);
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-muted);
+  }
+
+  .lyra-shape-presets button:hover {
+    color: var(--color-fg);
+  }
+
+  .lyra-shape-presets button.is-on {
+    background: var(--color-accent);
+    color: var(--color-accent-fg);
+  }
+
+  .lyra-shape-side {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 10px;
+    padding-bottom: 4px;
+  }
+
+  .lyra-shape-arm {
+    width: 100%;
+    height: 2.05rem;
+    border-radius: 6px;
+    background: var(--color-elevated);
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--color-muted);
+  }
+
+  .lyra-shape-arm.is-on {
+    background: var(--color-accent);
+    color: var(--color-accent-fg);
+  }
+
+  .lyra-shape-dests {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 4px;
+  }
+
+  .lyra-shape-dests button {
+    height: 1.85rem;
+    border-radius: 6px;
+    background: var(--color-elevated);
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-muted);
+  }
+
+  .lyra-shape-dests button.is-on {
+    background: var(--color-accent);
+    color: var(--color-accent-fg);
+  }
+
+  .lyra-shape-knobs {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    justify-items: center;
+    column-gap: 4px;
+    padding-top: 4px;
+  }
+
+  .lyra-shape-side .lyra-knob {
+    width: 3.25rem;
+    height: 3.25rem;
+  }
+
+  .lyra-shape-side .lyra-arm,
+  .lyra-shape-knobs span {
+    font-size: 0.75rem;
   }
 
   .lyra-layers {
@@ -1139,6 +1272,17 @@
     flex-direction: column;
     background: var(--color-surface);
     padding: 12px 14px 18px;
+  }
+
+  .lyra-cell.lyra-wt {
+    height: 30.5rem;
+    max-height: 30.5rem;
+  }
+
+  .lyra-cell.lyra-shape {
+    height: 21rem;
+    max-height: 21rem;
+    padding-bottom: 20px;
   }
 
   .lyra-cell-title {

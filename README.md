@@ -1,10 +1,19 @@
-# LYRA-32 Mk IV.6
+# LYRA-32 Mk V
 
 Hybrid polyphonic web synthesizer by [Raybridge Digital](https://github.com/raybridgedigital).
 
 Play from a class-compliant USB-C MIDI keyboard, the computer keys (A–L), or the on-screen piano. Chrome / Edge / Firefox.
 
-This tag is the restore point **with** the wavetable plate, 12 real tables, and Serum-style warp.
+This tag is the restore point **with** the Shape plate (drawn LFO / envelope) and the 12-table wavetable.
+
+## Mk V (v5.0)
+
+- Shape plate under Wavetable: draw a curve, Env (one-shot) or Loop, Time / From / Depth
+- Dest Amp, Cut, Pos, Pitch, Pan, Drive, FM — Serum 2 / Vital style
+- Factory shapes: Silk, Lift, Glow, Rush, Zig, Step, Snap, Pluck, Hold, Fall, Arc, Dip, Pulse, Spike, Trem, Gate, Chop, Warp
+- From is a floor under the whole curve (0–100%); Amp swell starts on the curve (no delay leak)
+- All 12 wavetable names visible (Classic → Grit)
+- Restore: `git checkout v5.0.0`
 
 ## Mk IV.6 (v4.6)
 

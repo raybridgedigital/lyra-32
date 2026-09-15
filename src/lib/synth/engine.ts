@@ -6,6 +6,7 @@ import { layersForNote, type EngineLayer, type EngineStack } from "./stack";
 import { DRUM_PARTS, defaultGroove, stepsOf, type DrumPart } from "./groove";
 import { DrumVoice } from "./drums";
 import { wtPeriodic, shapeFromOsc, type WtShape } from "./wavetable";
+import { sampleShape, type DrawShape } from "./draw-shape";
 
 const MAX_VOICES = 32;
 const SUPERSAW_DETUNE = [-11, -7, -3, 0, 3, 7, 11];
@@ -179,6 +180,11 @@ class Voice {
   private bend: number;
   private fenv: ConstantSourceNode | null = null;
   private layerAmp: GainNode;
+  private shapeAmp: GainNode;
+  private shapePitch: ConstantSourceNode | null = null;
+  private shapeCut: ConstantSourceNode | null = null;
+  private basePan = 0;
+  private lastShapePwm = -1;
   layer: "a" | "b" | "seq";
 
   constructor(
@@ -208,6 +214,13 @@ class Voice {
     this.expr = ctx.createGain();
     this.vca.gain.setValueAtTime(0.0001, now);
     this.expr.gain.setValueAtTime(1, now);
+    this.shapeAmp = ctx.createGain();
+    const sh0 = patch.drawShape;
+    const y0 = sh0?.on ? sampleShape(sh0.points, 0, sh0.from ?? 0) : 1;
+    const amp0 =
+      sh0?.on && sh0.dest === "amp" ? Math.max(0.0001, 1 - sh0.depth + sh0.depth * y0) : 1;
+    this.shapeAmp.gain.setValueAtTime(amp0, now);
+    this.basePan = clamp(layer?.pan ?? 0, -1, 1);
 
     const shaper = ctx.createWaveShaper();
     shaper.curve = tanhCurve(patch.drive) as Float32Array<ArrayBuffer>;
@@ -260,16 +273,17 @@ class Voice {
     this.filters[this.filters.length - 1]!.connect(toneLo);
     toneLo.connect(toneHi);
     toneHi.connect(this.vca);
-    this.vca.connect(this.pan);
+    this.vca.connect(this.shapeAmp);
+    this.shapeAmp.connect(this.pan);
     this.pan.connect(this.expr);
     this.layerAmp = ctx.createGain();
     this.layerAmp.gain.setValueAtTime(clamp(layer?.gain ?? 1, 0, 1.5), now);
-    this.pan.pan.setValueAtTime(clamp(layer?.pan ?? 0, -1, 1), now);
+    this.pan.pan.setValueAtTime(this.basePan, now);
     this.expr.connect(this.layerAmp);
     this.layerAmp.connect(dest);
     this.fxSend = ctx.createGain();
     this.fxSend.gain.setValueAtTime(0, now);
-    this.vca.connect(this.fxSend);
+    this.shapeAmp.connect(this.fxSend);
     this.fxSend.connect(dest);
 
     const uni = Math.max(1, Math.min(7, patch.unison.voices || 1));
@@ -290,6 +304,19 @@ class Voice {
     }
     this.spawnOsc(patch, "osc1", midi, bend, now, uni, pwmBias);
     this.spawnOsc(patch, "osc2", midi, bend, now, uni, pwmBias * 0.7);
+
+    this.shapePitch = ctx.createConstantSource();
+    this.shapePitch.offset.setValueAtTime(0, now);
+    this.shapePitch.start(now);
+    this.extras.push(this.shapePitch);
+    this.sources.push(this.shapePitch);
+    for (const o of this.oscs) this.shapePitch.connect(o.detune);
+    this.shapeCut = ctx.createConstantSource();
+    this.shapeCut.offset.setValueAtTime(0, now);
+    this.shapeCut.start(now);
+    this.extras.push(this.shapeCut);
+    this.sources.push(this.shapeCut);
+    for (const f of this.filters) this.shapeCut.connect(f.detune);
 
     if (patch.subLevel > 0.001) {
       const sub = ctx.createOscillator();
@@ -416,6 +443,8 @@ class Voice {
     this.vca.gain.setValueAtTime(0.0001, now);
     this.vca.gain.linearRampToValueAtTime(peak, now + a);
     this.vca.gain.setTargetAtTime(s, now + a, d / 3);
+
+    if (sh0?.on && sh0.depth > 0.008) this.applyShape(sh0, y0, now);
   }
 
   private routeLfo(lfo: AudioNode, spec: { dest: ModDest; depth: number; fade?: number; wave?: LfoWave }, scale: number, sh?: ConstantSourceNode) {
@@ -668,9 +697,76 @@ class Voice {
     return !this.dead && !this.releasing;
   }
 
+  get alive() {
+    return !this.dead;
+  }
+
   setMix(gain: number, pan: number, now: number) {
+    this.basePan = clamp(pan, -1, 1);
     this.layerAmp.gain.setTargetAtTime(clamp(gain, 0, 1.5), now, 0.03);
-    this.pan.pan.setTargetAtTime(clamp(pan, -1, 1), now, 0.03);
+    this.pan.pan.setTargetAtTime(this.basePan, now, 0.03);
+  }
+
+  applyShape(sh: DrawShape, y: number, now: number) {
+    if (this.dead) return;
+    const depth = clamp(sh.depth, 0, 1);
+    const dest = sh.dest;
+    const amp = dest === "amp" ? Math.max(0.0001, 1 - depth + depth * y) : 1;
+    try {
+      this.shapeAmp.gain.setTargetAtTime(amp, now, 0.018);
+    } catch {
+      /* */
+    }
+    if (this.shapePitch) {
+      const pch = dest === "pitch" ? (y - 0.5) * 2 * depth * 520 : 0;
+      try {
+        this.shapePitch.offset.setTargetAtTime(pch, now, 0.02);
+      } catch {
+        /* */
+      }
+    }
+    if (this.shapeCut) {
+      const cut = dest === "cutoff" ? (y - 0.5) * 2 * depth * 2600 : 0;
+      try {
+        this.shapeCut.offset.setTargetAtTime(cut, now, 0.02);
+      } catch {
+        /* */
+      }
+    }
+    if (dest === "pan") {
+      try {
+        this.pan.pan.setTargetAtTime(clamp(this.basePan + (y - 0.5) * 2 * depth, -1, 1), now, 0.03);
+      } catch {
+        /* */
+      }
+    }
+    if (dest === "pwm") {
+      const pwm = clamp(this.patchSnap.osc1.pwm + (y - 0.5) * depth, 0.05, 0.95);
+      const q = Math.round(pwm * 48);
+      if (q !== this.lastShapePwm) {
+        this.lastShapePwm = q;
+        this.setWaveShape("osc1", { ...this.patchSnap.osc1, pwm });
+      }
+    }
+    if (dest === "drive" && this.driveIn) {
+      try {
+        this.driveIn.gain.setTargetAtTime(1 + (y - 0.5) * 2 * depth * 0.95, now, 0.03);
+      } catch {
+        /* */
+      }
+    }
+    if (dest === "fm" && this.fmGain) {
+      const freq0 = midiToFreq(this.midi, this.bend);
+      try {
+        this.fmGain.gain.setTargetAtTime(
+          Math.max(0, this.patchSnap.fmIndex * freq0 * 4 * (0.15 + y * depth * 1.7)),
+          now,
+          0.03,
+        );
+      } catch {
+        /* */
+      }
+    }
   }
 
   kill() {
@@ -693,6 +789,7 @@ class Voice {
     }
     try {
       this.vca.disconnect();
+      this.shapeAmp.disconnect();
       this.mix.disconnect();
       this.pan.disconnect();
       this.expr.disconnect();
@@ -791,6 +888,8 @@ export class LyraEngine {
   private shAcc1 = 0;
   private shAcc2 = 0;
   private shLast = 0;
+  private shapeClock = 0;
+  shapePhase = 0;
   private seqVoices: Voice[] = [];
   private seqByTrack: Voice[][] = [[], [], [], []];
   private clipTimers: number[] = [];
@@ -990,9 +1089,36 @@ export class LyraEngine {
           }
         }
       }
+      this.tickShape(dt, now);
       this.shTimer = window.setTimeout(tick, 16);
     };
     tick();
+  }
+
+  private tickShape(dt: number, now: number) {
+    const sh = this.patch.drawShape;
+    if (!sh?.on || sh.depth < 0.008) {
+      this.shapePhase = 0;
+      const rest: DrawShape = { on: false, mode: "env", dest: "amp", time: 1, depth: 0, from: 0, points: [1] };
+      for (const v of this.voices) if (v.alive) v.applyShape(rest, 1, now);
+      return;
+    }
+    const dur = Math.max(0.15, sh.time);
+    const live = this.voices.filter((v) => v.alive);
+    if (sh.mode === "loop") {
+      this.shapeClock = (this.shapeClock + dt / dur) % 1;
+      this.shapePhase = this.shapeClock;
+      const y = sampleShape(sh.points, this.shapePhase, sh.from ?? 0);
+      for (const v of live) v.applyShape(sh, y, now);
+      return;
+    }
+    let lead = 0;
+    for (const v of live) {
+      const t = Math.min(1, Math.max(0, (now - v.startedAt) / dur));
+      lead = Math.max(lead, t);
+      v.applyShape(sh, sampleShape(sh.points, t, sh.from ?? 0), now);
+    }
+    this.shapePhase = live.length ? lead : 0;
   }
 
   applyPatch(p: Patch) {

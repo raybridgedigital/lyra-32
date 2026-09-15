@@ -249,6 +249,15 @@ function SoundTab() {
         Two global LFOs. Rate, Depth, and Fade (rise time) are sliders. Dest: Cut, Pitch, Pan, Amp, Res, FM. Wave: sine,
         tri, saw, square, S&H (stepped random). Rate changes apply live; dest is sampled at note-on.
       </P>
+      <H>Shape (drawn LFO)</H>
+      <P>
+        Plate under Wavetable. Drag on the graph to draw a curve, like Serum 2 / Vital. Env plays it once per note; Loop
+        repeats. Time is the length of the whole shape (seconds). From is a floor (0–100%) under the whole curve — it
+        stays the same shape, just never goes below that. Silk / Lift / Glow / Rush set 15%; Spike, Gate, Trem, Warp and
+        the other chops snap it back to 0. 100% is a flat full line. Depth is how far it moves the destination. Dest: Amp
+        (volume swell 0–100%), Cut, Pos (table), Pitch, Pan, Drive, FM. Arm to hear it. Ramp / Ease / Pulse / Dip / Gate
+        are starting shapes (Ramp, Bloom, Spike, Trem, Chop…).
+      </P>
       <H>Matrix</H>
       <P>Six extra routes, stacked on the LFO plates. Sources and destinations:</P>
       <Ul
@@ -380,7 +389,7 @@ function AboutTab() {
     <>
       <H>LYRA-32</H>
       <P>
-        by Ray Bridge Digital · Mk IV.6 · Version 4.6. 32-voice hybrid synthesizer for Chrome, Edge, and Firefox. Dual
+        by Ray Bridge Digital · Mk V · Version 5.0. 32-voice hybrid synthesizer for Chrome, Edge, and Firefox. Dual
         oscillator + sub + noise, dual LFO, 6-slot matrix, FX rack, arpeggiator with 16-step pattern, two-layer stack /
         split, and a groovebox (4 MIDI takes + 8-lane drums). USB-C MIDI, computer keys, or the on-screen piano. Not a
         VST/AU — DAW mode uses IAC MIDI.

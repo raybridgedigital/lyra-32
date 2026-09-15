@@ -42,6 +42,7 @@ import { GrooveBar } from "./GrooveBar";
 import { AmtFader, Knob, LfoSlider, Seg } from "./Knob";
 import { Scope } from "./Scope";
 import { WavetablePlate } from "./WavetablePlate";
+import { ShapePlate } from "./ShapePlate";
 
 function fmtHz(v: number) {
   const hz = 20 * Math.pow(1000, v);
@@ -734,6 +735,7 @@ export function SynthApp() {
 
         <PatternBar patch={p} playhead={arpStep} onChange={update} />
         <WavetablePlate patch={p} onChange={update} />
+        <ShapePlate patch={p} onChange={update} />
         <GrooveBar />
 
         <section className="lyra-lib mt-3 rounded-xl bg-surface p-4">
