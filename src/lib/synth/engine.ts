@@ -10,7 +10,7 @@ import { sampleShape, shapeDests, type DrawShape } from "./draw-shape";
 import { encodeWavStereo, mergeChunks } from "./wav-bounce";
 
 const MAX_VOICES = 32;
-const MAX_VOICES_ANDROID = 12;
+const MAX_VOICES_ANDROID = 8;
 const SUPERSAW_DETUNE = [-11, -7, -3, 0, 3, 7, 11];
 
 function clamp(n: number, a: number, b: number) {
