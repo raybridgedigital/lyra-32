@@ -5,6 +5,7 @@ import {
   CircleHelp,
   Download,
   Maximize2,
+  MoreHorizontal,
   Upload,
   Keyboard as KeyboardIcon,
   Pencil,
@@ -21,6 +22,7 @@ import { bindAudioUnlock, bindComputerKeyboard, useSynth } from "@/lib/synth/sto
 import { tapTempo } from "@/lib/synth/tap-tempo";
 import { startStageKeepAlive } from "@/lib/synth/stage-lock";
 import { midiBadgeLabel } from "@/lib/synth/midi";
+import { isIosTouch } from "@/lib/synth/engine";
 import type {
   ArpMode,
   ArpRate,
@@ -168,6 +170,22 @@ export function SynthApp() {
   const [libQ, setLibQ] = useState("");
   const [renameId, setRenameId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
+  const [padMenu, setPadMenu] = useState(false);
+  const [tapFlash, setTapFlash] = useState(false);
+  const [panicFlash, setPanicFlash] = useState(false);
+  const pad = isIosTouch();
+
+  useEffect(() => {
+    if (!padMenu) return;
+    const close = () => setPadMenu(false);
+    const t = window.setTimeout(() => {
+      window.addEventListener("pointerdown", close);
+    }, 0);
+    return () => {
+      window.clearTimeout(t);
+      window.removeEventListener("pointerdown", close);
+    };
+  }, [padMenu]);
 
   useEffect(() => {
     useSynth.getState().hydrate();
@@ -219,10 +237,20 @@ export function SynthApp() {
 
   return (
     <div
-      className={cn("flex min-h-dvh flex-col overflow-x-hidden bg-bg text-fg", showKeys ? "pb-24" : "pb-4")}
+      className={cn(
+        "flex min-h-dvh flex-col bg-bg text-fg",
+        showKeys ? "pb-24" : "pb-4",
+        !pad && "overflow-x-hidden",
+      )}
       data-audio={ctxState}
     >
-      <header className="sticky top-0 z-20 border-b border-border bg-bg/95 px-3 py-1.5 backdrop-blur-sm">
+      <header
+        className={cn(
+          "sticky top-0 z-20 border-b border-border bg-bg/95 px-3 py-1.5 backdrop-blur-sm",
+          pad &&
+            "z-50 pr-[max(1.25rem,env(safe-area-inset-right))] pt-[max(3.25rem,env(safe-area-inset-top))]",
+        )}
+      >
         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
           <div className="flex min-w-0 items-center gap-3">
             <div className="lyra-brand min-w-0">
@@ -240,7 +268,6 @@ export function SynthApp() {
                   onClick={() => useSynth.setState({ transpose: 0 })}
                 >
                   {transpose === 0 ? "0" : transpose > 0 ? `+${transpose}` : `${transpose}`}
-                  <span className="ml-0.5 text-[0.6rem] tracking-wide">TR</span>
                 </button>
                 <button type="button" className="h-10 rounded-r-md bg-elevated px-2.5 text-base font-semibold" onClick={() => shiftTranspose(1)} aria-label="Transpose up">
                   +
@@ -277,7 +304,7 @@ export function SynthApp() {
               </button>
               <div
                 className={cn(
-                  "hidden h-10 w-14 shrink-0 items-center justify-center rounded-md text-sm font-semibold md:flex",
+                  pad ? "hidden" : "hidden h-10 w-14 shrink-0 items-center justify-center rounded-md text-sm font-semibold md:flex",
                   live ? "text-accent" : "text-muted",
                 )}
               >
@@ -286,13 +313,18 @@ export function SynthApp() {
             </div>
           </div>
 
-          <div className="flex w-80 items-center justify-center gap-2 sm:w-[28rem]">
-            <Scope compact />
+          <div className={cn("flex items-center justify-center gap-1.5", pad ? "w-[9.5rem]" : "w-80 sm:w-[28rem]")}>
+            <div className="min-w-0 flex-1">
+              <Scope compact />
+            </div>
             <div
-              className="flex h-10 w-12 shrink-0 items-center justify-center gap-1 font-mono text-sm tabular-nums text-muted"
+              className={cn(
+                "flex h-10 shrink-0 items-center justify-center font-mono text-sm tabular-nums text-muted",
+                pad ? "w-7" : "w-12 gap-1",
+              )}
               title="Voices sounding"
             >
-              <Activity className="size-3.5 shrink-0" />
+              {pad ? null : <Activity className="size-3.5 shrink-0" />}
               <span className="w-5 text-right">{voices}</span>
             </div>
           </div>
@@ -303,8 +335,15 @@ export function SynthApp() {
               type="button"
               aria-label="Tap tempo"
               title="Tap two or more times to set BPM"
-              onClick={() => tapTempo((tempo) => update(clonePatch(p, { arp: { ...p.arp, tempo } })))}
-              className="h-10 shrink-0 rounded-md bg-elevated px-3 text-base font-semibold text-muted hover:text-fg"
+              onClick={() => {
+                setTapFlash(true);
+                window.setTimeout(() => setTapFlash(false), 180);
+                tapTempo((tempo) => update(clonePatch(p, { arp: { ...p.arp, tempo } })));
+              }}
+              className={cn(
+                "h-10 shrink-0 rounded-md px-3 text-base font-semibold",
+                tapFlash ? "bg-accent text-accent-fg" : "bg-elevated text-muted hover:text-fg",
+              )}
             >
               Tap
             </button>
@@ -338,18 +377,21 @@ export function SynthApp() {
             >
               {mute ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
             </button>
-            <button
-              type="button"
-              onClick={() => toggleBounce()}
-              className={cn(
-                "h-10 shrink-0 rounded-md px-3 text-base font-semibold",
-                bounceOn ? "bg-accent text-accent-fg" : "bg-elevated text-muted hover:text-fg",
-              )}
-              title={bounceOn ? "Stop bounce and download WAV" : "Bounce — record the output to a WAV"}
-              aria-pressed={bounceOn}
-            >
-              {bounceOn ? "Stop" : "Wav"}
-            </button>
+            {!pad ? (
+              <button
+                type="button"
+                onClick={() => toggleBounce()}
+                className={cn(
+                  "h-10 shrink-0 rounded-md px-3 text-base font-semibold",
+                  bounceOn ? "bg-accent text-accent-fg" : "bg-elevated text-muted hover:text-fg",
+                )}
+                title={bounceOn ? "Stop bounce and download WAV" : "Bounce — record the output to a WAV"}
+                aria-pressed={bounceOn}
+              >
+                {bounceOn ? "Stop" : "Wav"}
+              </button>
+            ) : null}
+            {pad ? null : (
             <button
               type="button"
               onClick={() => {
@@ -362,34 +404,104 @@ export function SynthApp() {
             >
               <Maximize2 className="size-4" />
             </button>
+            )}
+            {!pad ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setStageLock(!stageLock)}
+                  className={cn(
+                    "h-10 shrink-0 rounded-md px-3 text-base font-semibold",
+                    stageLock ? "bg-accent text-accent-fg" : "bg-elevated text-muted hover:text-fg",
+                  )}
+                  title="Keep this tab awake for a set. Off at home — uses a bit more battery and RAM."
+                  aria-pressed={stageLock}
+                >
+                  Stage
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setHelpOpen(true)}
+                  className={cn(
+                    "grid size-10 place-items-center rounded-md",
+                    helpOpen ? "bg-accent text-accent-fg" : "bg-elevated text-muted hover:text-fg",
+                  )}
+                  aria-label="Open help"
+                  title="Help (?)"
+                >
+                  <CircleHelp className="size-4" />
+                </button>
+              </>
+            ) : (
+              <div className="relative shrink-0" onPointerDown={(e) => e.stopPropagation()}>
+                <button
+                  type="button"
+                  onClick={() => setPadMenu((v) => !v)}
+                  className={cn(
+                    "grid size-10 place-items-center rounded-md",
+                    padMenu || stageLock || bounceOn || helpOpen
+                      ? "bg-accent text-accent-fg"
+                      : "bg-elevated text-muted hover:text-fg",
+                  )}
+                  aria-label="More"
+                  title="Wav, Stage, Help"
+                  aria-expanded={padMenu}
+                >
+                  <MoreHorizontal className="size-4" />
+                </button>
+                {padMenu ? (
+                  <div className="absolute right-0 top-full z-30 mt-1 flex min-w-36 flex-col gap-1 rounded-lg border border-border bg-bg p-1 shadow-lg">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        toggleBounce();
+                        setPadMenu(false);
+                      }}
+                      className={cn(
+                        "h-11 rounded-md px-3 text-left text-base font-semibold",
+                        bounceOn ? "bg-accent text-accent-fg" : "bg-elevated text-fg",
+                      )}
+                    >
+                      {bounceOn ? "Stop wav" : "Wav"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStageLock(!stageLock);
+                        setPadMenu(false);
+                      }}
+                      className={cn(
+                        "h-11 rounded-md px-3 text-left text-base font-semibold",
+                        stageLock ? "bg-accent text-accent-fg" : "bg-elevated text-fg",
+                      )}
+                    >
+                      Stage {stageLock ? "on" : "off"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setHelpOpen(true);
+                        setPadMenu(false);
+                      }}
+                      className="h-11 rounded-md bg-elevated px-3 text-left text-base font-semibold text-fg"
+                    >
+                      Help
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            )}
             <button
               type="button"
-              onClick={() => setStageLock(!stageLock)}
+              onClick={() => {
+                setPanicFlash(true);
+                window.setTimeout(() => setPanicFlash(false), 180);
+                panic();
+              }}
               className={cn(
                 "h-10 shrink-0 rounded-md px-3 text-base font-semibold",
-                stageLock ? "bg-accent text-accent-fg" : "bg-elevated text-muted hover:text-fg",
+                panicFlash ? "bg-accent text-accent-fg" : "bg-elevated text-muted hover:text-fg",
               )}
-              title="Keep this tab awake for a set. Off at home — uses a bit more battery and RAM."
-              aria-pressed={stageLock}
-            >
-              Stage
-            </button>
-            <button
-              type="button"
-              onClick={() => setHelpOpen(true)}
-              className={cn(
-                "grid size-10 place-items-center rounded-md",
-                helpOpen ? "bg-accent text-accent-fg" : "bg-elevated text-muted hover:text-fg",
-              )}
-              aria-label="Open help"
-              title="Help (?)"
-            >
-              <CircleHelp className="size-4" />
-            </button>
-            <button
-              type="button"
-              onClick={panic}
-              className="h-10 shrink-0 rounded-md bg-elevated px-3 text-base font-semibold text-muted hover:text-fg"
             >
               Panic
             </button>
@@ -401,7 +513,7 @@ export function SynthApp() {
       <LayerStrip patches={allPatches} />
       <SceneBar />
 
-      <main className="flex w-full flex-col px-1 py-1 sm:px-2">
+      <main className={cn("flex w-full flex-col px-1 py-1 sm:px-2", pad && "overflow-x-hidden")}>
         <div className={cn("lyra-face", showKeys && "keys-on")}>
           <Cell title="Oscillator 1">
             <Seg value={p.osc1.wave} options={WAVES} onChange={(wave) => update(clonePatch(p, { osc1: { ...p.osc1, wave } }))} />
@@ -1127,6 +1239,7 @@ function MidiBadge({ status, name }: { status: string; name: string | null }) {
     <div
       className={cn(
         "lyra-midi-name flex min-w-0 max-w-[min(42vw,26rem)] items-center gap-1.5 font-semibold",
+        isIosTouch() && "max-w-[9.5rem]",
         status === "ok" ? "text-accent" : "text-muted",
       )}
       title={label}

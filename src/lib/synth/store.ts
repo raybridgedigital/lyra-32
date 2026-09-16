@@ -342,7 +342,10 @@ function hookMidi(engine: LyraEngine) {
           useSynth.getState().setPatch(p);
         }
       },
-      pitchBend: (semis) => engine.setBend(semis),
+      pitchBend: (semis) => {
+        if (isTouchIos()) return;
+        engine.setBend(semis);
+      },
       aftertouch: (v) => engine.setAftertouch(v),
       onStatus: (status, name) => useSynth.setState({ midiStatus: status, midiName: name }),
       onPorts: (ports) => useSynth.setState({ midiPorts: ports }),

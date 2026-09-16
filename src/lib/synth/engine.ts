@@ -10,6 +10,7 @@ import { sampleShape, shapeDests, type DrawShape } from "./draw-shape";
 import { encodeWavStereo, mergeChunks } from "./wav-bounce";
 
 const MAX_VOICES = 32;
+const MAX_VOICES_ANDROID = 12;
 const SUPERSAW_DETUNE = [-11, -7, -3, 0, 3, 7, 11];
 
 function clamp(n: number, a: number, b: number) {
@@ -116,6 +117,10 @@ export function isIosTouch() {
     /iPad|iPhone|iPod/.test(navigator.userAgent) ||
     (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
   );
+}
+
+export function isAndroid() {
+  return typeof navigator !== "undefined" && /Android/i.test(navigator.userAgent);
 }
 
 /** Must run inside a user-gesture stack. Never await before this. */
@@ -1529,9 +1534,10 @@ export class LyraEngine {
   }
 
   private spawnOne(midi: number, velocity: number, now: number, L: EngineLayer, mix: "a" | "b" | "seq" = L.id) {
-    while (this.voices.length >= MAX_VOICES) {
+    while (this.voices.length >= (isAndroid() ? MAX_VOICES_ANDROID : MAX_VOICES)) {
       const oldest = this.voices[0];
-      oldest?.kill();
+      if (isAndroid() && oldest && !oldest.releasing) oldest.release(this.patch);
+      else oldest?.kill();
     }
     const v = new Voice(
       this.ctx,
