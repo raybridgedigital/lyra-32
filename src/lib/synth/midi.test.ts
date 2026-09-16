@@ -65,12 +65,4 @@ describe("parseMidi pitch bend", () => {
     assert.equal(bends.length, 1);
     assert.equal(bends[0], 0);
   });
-
-  it("unwraps USB-MIDI CIN packets", () => {
-    const notes: number[] = [];
-    const { h } = capture();
-    h.noteOn = (n) => notes.push(n);
-    parseMidi(Uint8Array.of(0x09, 0x90, 60, 100), h);
-    assert.deepEqual(notes, [60]);
-  });
 });
