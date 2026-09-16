@@ -6,16 +6,19 @@ Play from a class-compliant USB-C MIDI keyboard, the computer keys (A–L), or t
 
 **Play it:** [raybridgedigital.github.io/lyra-32](https://raybridgedigital.github.io/lyra-32/) (GitHub Pages — open in a full Chrome tab).
 
-This tag is the restore point **with** iPad MIDIWeb audio (speakers + USB to CK).
+This tag is the restore point **with** iPad MIDIWeb audio and the pitch-bend parse guard.
 
-## Mk V.4 (v5.4)
+## Mk V.4 (v5.4.1)
 
 - iPad / MIDIWeb: HTML audio tap so iPad speakers and CK USB audio work (Mac path unchanged)
+- Ignore truncated pitch-bend (MIDIWeb no longer slams pitch down)
 - 44.1 kHz on iPad; a few ms more latency than Mac Chrome USB is expected
+- Restore: `git checkout v5.4.1`
+
+## Mk V.4 (v5.4.0)
+
+- First iPad speakers / CK USB audio freeze
 - Restore: `git checkout v5.4.0`
-
-## Mk V.3 (v5.3)
-
 
 ## Mk V.3 (v5.3)
 
