@@ -8,6 +8,11 @@ Play from a class-compliant USB-C MIDI keyboard, the computer keys (A–L), or t
 
 This tag is the restore point **with** true dual layer (FX, arp, Shape, LFO, poly/glide per layer) and Stacked library load.
 
+## Mk V.7.1 (v5.7.1)
+
+- 50 V.7 singles + 80 stacked factory pairs (library 401).
+- Restore: `git checkout v5.7.1`
+
 ## Mk V.7 (v5.7)
 
 - Per layer: FX, arp, Shape, LFO clocks, poly/glide (plus tone). Groove, tempo, Vol shared.

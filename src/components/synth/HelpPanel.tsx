@@ -552,7 +552,7 @@ function AboutTab() {
     <>
       <H>LYRA-32</H>
       <P>
-        by Ray Bridge Digital · Mk V.7 · Version 5.7. 32-voice hybrid synthesizer for Chrome, Edge, and Firefox. Dual
+        by Ray Bridge Digital · Mk V.7 · Version 5.7.1. 32-voice hybrid synthesizer for Chrome, Edge, and Firefox. Dual
         oscillator + sub + noise, dual LFO, 6-slot matrix, FX rack, arpeggiator with 16-step pattern, two-layer stack /
         split, a groovebox, drawn Shape (×2), scenes, MIDI learn, and bounce-to-wav. USB-C MIDI, computer keys, or the
         on-screen piano. Not a VST/AU — DAW mode uses IAC MIDI. Open Help → Live for the stage cheat sheet.
