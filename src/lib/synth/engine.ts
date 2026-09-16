@@ -7,6 +7,7 @@ import { DRUM_PARTS, defaultGroove, stepsOf, type DrumPart } from "./groove";
 import { DrumVoice } from "./drums";
 import { wtPeriodic, shapeFromOsc, type WtShape } from "./wavetable";
 import { sampleShape, shapeDests, type DrawShape } from "./draw-shape";
+import { encodeWavStereo, mergeChunks } from "./wav-bounce";
 
 const MAX_VOICES = 32;
 const SUPERSAW_DETUNE = [-11, -7, -3, 0, 3, 7, 11];
@@ -913,6 +914,14 @@ export class LyraEngine {
   private grooveNow = 0;
   private grooveTickAt = 0;
   private groovePlaying = false;
+  clickOn = false;
+  bouncing = false;
+  private clickGain: GainNode | null = null;
+  private recNode: ScriptProcessorNode | null = null;
+  private recSilent: GainNode | null = null;
+  private recL: Float32Array[] = [];
+  private recR: Float32Array[] = [];
+  private countTimer: number | null = null;
   private shTimer: number | null = null;
   private shAcc1 = 0;
   private shAcc2 = 0;
@@ -1569,8 +1578,95 @@ export class LyraEngine {
     this.drums?.hit(part, vel, g.kit, this.ctx.currentTime);
   }
 
+  setClickOn(on: boolean) {
+    this.clickOn = on;
+  }
+
+  private ensureClick() {
+    if (this.clickGain) return;
+    const g = this.ctx.createGain();
+    g.gain.value = 0.28;
+    g.connect(this.buses.master);
+    this.clickGain = g;
+  }
+
+  private blip(accent: boolean, now: number) {
+    this.ensureClick();
+    const o = this.ctx.createOscillator();
+    o.type = "triangle";
+    o.frequency.value = accent ? 1760 : 990;
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(accent ? 0.85 : 0.4, now);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.045);
+    o.connect(g);
+    g.connect(this.clickGain!);
+    o.start(now);
+    o.stop(now + 0.06);
+  }
+
+  countIn(then: () => void) {
+    kickContext(this.ctx);
+    if (this.countTimer != null) window.clearTimeout(this.countTimer);
+    const tempo = this.hostBpm ?? this.patch.arp.tempo;
+    const beat = 60 / Math.max(40, tempo);
+    const t0 = this.ctx.currentTime + 0.02;
+    for (let i = 0; i < 4; i++) this.blip(i === 0, t0 + i * beat);
+    this.countTimer = window.setTimeout(() => {
+      this.countTimer = null;
+      then();
+    }, Math.round(4 * beat * 1000));
+  }
+
+  startBounce() {
+    if (this.recNode) return;
+    kickContext(this.ctx);
+    const proc = this.ctx.createScriptProcessor(4096, 2, 2);
+    this.recL = [];
+    this.recR = [];
+    this.bouncing = true;
+    proc.onaudioprocess = (ev) => {
+      if (!this.bouncing) return;
+      this.recL.push(new Float32Array(ev.inputBuffer.getChannelData(0)));
+      this.recR.push(new Float32Array(ev.inputBuffer.getChannelData(1)));
+      let n = 0;
+      for (const c of this.recL) n += c.length;
+      if (n > this.ctx.sampleRate * 180) this.stopBounce();
+    };
+    const silent = this.ctx.createGain();
+    silent.gain.value = 0;
+    this.buses.limiter.connect(proc);
+    proc.connect(silent);
+    silent.connect(this.ctx.destination);
+    this.recNode = proc;
+    this.recSilent = silent;
+  }
+
+  stopBounce(): Blob | null {
+    this.bouncing = false;
+    const proc = this.recNode;
+    const silent = this.recSilent;
+    this.recNode = null;
+    this.recSilent = null;
+    try {
+      proc?.disconnect();
+      silent?.disconnect();
+    } catch {
+      /* */
+    }
+    if (!this.recL.length) return null;
+    const L = mergeChunks(this.recL);
+    const R = mergeChunks(this.recR.length ? this.recR : this.recL);
+    this.recL = [];
+    this.recR = [];
+    return encodeWavStereo(L, R, this.ctx.sampleRate);
+  }
+
   setGroovePlaying(on: boolean) {
     const g = this.patch.groove ?? defaultGroove();
+    if (!on && this.countTimer != null) {
+      window.clearTimeout(this.countTimer);
+      this.countTimer = null;
+    }
     this.groovePlaying = on;
     if (on && (g.seqOn || g.drumsOn)) {
       if (this.grooveTimer == null) this.grooveIndex = 0;
@@ -1638,6 +1734,8 @@ export class LyraEngine {
     const now = this.ctx.currentTime;
     this.grooveNow = i;
     this.grooveTickAt = performance.now();
+
+    if (this.clickOn && i % 4 === 0) this.blip(i % 16 === 0, now);
 
     if (g.drumsOn) {
       for (const part of DRUM_PARTS) {

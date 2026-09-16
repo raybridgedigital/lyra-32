@@ -6,6 +6,7 @@ import type { LayerMix, Patch, StackMode } from "./types";
 export const SCENE_N = 8;
 
 export type Scene = {
+  name?: string;
   layerA: Patch;
   layerB: Patch;
   mixA: LayerMix;
@@ -57,6 +58,7 @@ export function loadScenes(): SceneSlot[] {
       const s = x as Scene;
       if (!s.layerA || !s.layerB) continue;
       out[i] = {
+        name: typeof s.name === "string" ? s.name.slice(0, 16) : undefined,
         layerA: clonePatch(s.layerA),
         layerB: clonePatch(s.layerB),
         mixA: { on: Boolean(s.mixA?.on), level: num(s.mixA?.level, 1), pan: num(s.mixA?.pan, 0) },

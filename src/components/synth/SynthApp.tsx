@@ -1,8 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   Cable,
   CircleHelp,
+  Download,
+  Maximize2,
+  Upload,
   Keyboard as KeyboardIcon,
   Pencil,
   Save,
@@ -126,6 +129,9 @@ export function SynthApp() {
   const factory = useSynth((s) => s.factory);
   const userPatches = useSynth((s) => s.userPatches);
   const saveUserPatch = useSynth((s) => s.saveUserPatch);
+  const exportBackup = useSynth((s) => s.exportBackup);
+  const importBackup = useSynth((s) => s.importBackup);
+  const backupRef = useRef<HTMLInputElement>(null);
   const renameUserPatch = useSynth((s) => s.renameUserPatch);
   const deleteUserPatch = useSynth((s) => s.deleteUserPatch);
   const favorites = useSynth((s) => s.favorites);
@@ -148,6 +154,8 @@ export function SynthApp() {
   const setHelpOpen = useSynth((s) => s.setHelpOpen);
   const stageLock = useSynth((s) => s.stageLock);
   const setStageLock = useSynth((s) => s.setStageLock);
+  const bounceOn = useSynth((s) => s.bounceOn);
+  const toggleBounce = useSynth((s) => s.toggleBounce);
   const midiLearn = useSynth((s) => s.midiLearn);
   const setMidiLearn = useSynth((s) => s.setMidiLearn);
   const clockFollow = useSynth((s) => s.clockFollow);
@@ -329,6 +337,30 @@ export function SynthApp() {
               aria-label={mute ? "Unmute" : "Mute"}
             >
               {mute ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
+            </button>
+            <button
+              type="button"
+              onClick={() => toggleBounce()}
+              className={cn(
+                "h-10 shrink-0 rounded-md px-3 text-base font-semibold",
+                bounceOn ? "bg-accent text-accent-fg" : "bg-elevated text-muted hover:text-fg",
+              )}
+              title={bounceOn ? "Stop bounce and download WAV" : "Bounce — record the output to a WAV"}
+              aria-pressed={bounceOn}
+            >
+              {bounceOn ? "Stop" : "Wav"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (document.fullscreenElement) void document.exitFullscreen();
+                else void document.documentElement.requestFullscreen?.();
+              }}
+              className="grid size-10 shrink-0 place-items-center rounded-md bg-elevated text-muted hover:text-fg"
+              title="Fullscreen"
+              aria-label="Fullscreen"
+            >
+              <Maximize2 className="size-4" />
             </button>
             <button
               type="button"
@@ -584,7 +616,7 @@ export function SynthApp() {
             </div>
           </Cell>
 
-          <Cell title="Amp EG">
+          <Cell title="Amp EG" className="lyra-amp">
             <div className="lyra-knobs lyra-knobs-5">
               <Knob
                 label="A"
@@ -595,8 +627,17 @@ export function SynthApp() {
                 format={fmtMs}
                 onChange={(attack) => update(clonePatch(p, { ampEnv: { ...p.ampEnv, attack } }))}
               />
-              <Knob label="S" value={p.ampEnv.sustain} format={fmtPct} onChange={(sustain) => update(clonePatch(p, { ampEnv: { ...p.ampEnv, sustain } }))} />
-              <Knob label="R" value={p.ampEnv.release} min={0.01} max={8} format={fmtMs} onChange={(release) => update(clonePatch(p, { ampEnv: { ...p.ampEnv, release } }))} />
+              <Knob
+                label="D"
+                learnId="dec"
+                value={p.ampEnv.decay}
+                min={0.01}
+                max={4}
+                format={fmtMs}
+                onChange={(decay) => update(clonePatch(p, { ampEnv: { ...p.ampEnv, decay } }))}
+              />
+              <Knob label="S" learnId="sus" value={p.ampEnv.sustain} format={fmtPct} onChange={(sustain) => update(clonePatch(p, { ampEnv: { ...p.ampEnv, sustain } }))} />
+              <Knob label="R" learnId="rel" value={p.ampEnv.release} min={0.01} max={8} format={fmtMs} onChange={(release) => update(clonePatch(p, { ampEnv: { ...p.ampEnv, release } }))} />
               <Knob label="Vel" value={p.velAmp ?? 0} arm armOn={0.4} format={fmtPct} onChange={(velAmp) => update(clonePatch(p, { velAmp }))} />
             </div>
           </Cell>
@@ -785,10 +826,10 @@ export function SynthApp() {
           </Cell>
         </div>
 
-        <PatternBar patch={p} playhead={arpStep} onChange={update} />
         <WavetablePlate patch={p} onChange={update} />
         <ShapePlate patch={p} onChange={update} />
         <GrooveBar />
+        <PatternBar patch={p} playhead={arpStep} onChange={update} />
 
         <section className="lyra-lib mt-3 rounded-xl bg-surface p-4">
           <h2 className="lyra-cell-title">Library · {factory.length} factory</h2>
@@ -891,6 +932,44 @@ export function SynthApp() {
               <Save className="size-4" />
               Save
             </button>
+            <button
+              type="button"
+              onClick={() => exportBackup()}
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-elevated px-4 text-sm font-semibold text-muted hover:text-fg"
+              title="Download scenes, MIDI maps, user patches, and favorites as a file"
+            >
+              <Download className="size-4" />
+              Backup
+            </button>
+            <button
+              type="button"
+              onClick={() => backupRef.current?.click()}
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-elevated px-4 text-sm font-semibold text-muted hover:text-fg"
+              title="Restore from a lyra-backup JSON file"
+            >
+              <Upload className="size-4" />
+              Restore
+            </button>
+            <input
+              ref={backupRef}
+              type="file"
+              accept="application/json,.json"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = "";
+                if (!file) return;
+                if (!window.confirm("Replace scenes, MIDI maps, and user patches in this browser with this backup?")) return;
+                void file.text().then((t) => {
+                  try {
+                    const ok = importBackup(JSON.parse(t));
+                    if (!ok) window.alert("That file is not a LYRA backup.");
+                  } catch {
+                    window.alert("That file is not a LYRA backup.");
+                  }
+                });
+              }}
+            />
           </div>
           {userPatches.length > 0 && (
             <ul className="mt-3 divide-y divide-border">

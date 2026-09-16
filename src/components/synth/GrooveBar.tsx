@@ -181,7 +181,12 @@ export function GrooveBar() {
   const patch = useSynth((s) => s.patch);
   const setGroove = useSynth((s) => s.setGroove);
   const playing = useSynth((s) => s.groovePlaying);
+  const countingIn = useSynth((s) => s.countingIn);
   const setPlaying = useSynth((s) => s.setGroovePlaying);
+  const clickOn = useSynth((s) => s.clickOn);
+  const setClickOn = useSynth((s) => s.setClickOn);
+  const countIn = useSynth((s) => s.countIn);
+  const setCountIn = useSynth((s) => s.setCountIn);
   const rec = useSynth((s) => s.recMode);
   const setRec = useSynth((s) => s.setRecMode);
   const playhead = useSynth((s) => s.grooveStep);
@@ -251,9 +256,15 @@ export function GrooveBar() {
         <Chip on={g.drumsOn} onClick={() => put({ ...g, drumsOn: !g.drumsOn })}>
           Drums
         </Chip>
-        <Chip on={playing} onClick={() => setPlaying(!playing)} title={playing ? "Stop" : "Play loop"}>
+        <Chip on={playing || countingIn} onClick={() => setPlaying(!playing)} title={playing ? "Stop" : "Play loop"}>
           {playing ? <Square className="size-3.5" /> : <Play className="size-3.5" />}
-          {playing ? "Stop" : "Play"}
+          {countingIn ? "Count" : playing ? "Stop" : "Play"}
+        </Chip>
+        <Chip on={clickOn} onClick={() => setClickOn(!clickOn)} title="Metronome click on quarters">
+          Click
+        </Chip>
+        <Chip on={countIn} onClick={() => setCountIn(!countIn)} title="1 bar count-in before Play">
+          Count
         </Chip>
         <Chip on={rec === "wait"} onClick={() => setRec(rec === "wait" ? "off" : "wait")} title="Wait for first note">
           Wait

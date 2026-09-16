@@ -7,7 +7,10 @@ import { defaultMix } from "./stack";
 import { DRUM_MIDI, clearDrumLane as wipeDrumLane, clearNoteTrack as wipeNoteTrack, grooveOf, newClipId, normalizeGroove, patchClip, snapshotGroove, stepsOf, type DrumPart, type Groove, type RecMode, type UserSequence } from "./groove";
 import { applyBeat, applyGroovePreset, applyPhrase } from "./groove-factory";
 import { applyLearnCc, loadMidiMap, saveMidiMap } from "./midi-learn";
-import { captureScene, emptyScenes, loadScenes, saveScenes, type SceneSlot } from "./scenes";
+import { captureScene, emptyScenes, loadScenes, saveScenes, type Scene, type SceneSlot } from "./scenes";
+import { morphScene } from "./morph";
+import { downloadBlob } from "./wav-bounce";
+import { applyBackup, collectBackup } from "./backup";
 
 const USER_KEY = "lyra32-user-patches";
 const SEQ_KEY = "lyra32-user-sequences";
@@ -119,6 +122,15 @@ type State = {
   midiMap: Record<number, string>;
   scenes: SceneSlot[];
   activeScene: number | null;
+  abSnap: Scene | null;
+  abOn: boolean;
+  morphFrom: number;
+  morphTo: number;
+  morphAmt: number;
+  clickOn: boolean;
+  countIn: boolean;
+  bounceOn: boolean;
+  countingIn: boolean;
   voices: number;
   cutoffMod: number;
   octave: number;
@@ -162,6 +174,13 @@ type State = {
   saveScene: (i: number) => void;
   recallScene: (i: number) => void;
   clearScene: (i: number) => void;
+  renameScene: (i: number, name: string) => void;
+  storeAb: () => void;
+  toggleAb: () => void;
+  setMorph: (from: number, to: number, amt: number) => void;
+  setClickOn: (on: boolean) => void;
+  setCountIn: (on: boolean) => void;
+  toggleBounce: () => void;
   selectLayer: (id: LayerId) => void;
   setLayerOn: (id: LayerId, on: boolean) => void;
   setLayerLevel: (id: LayerId, level: number) => void;
@@ -180,10 +199,31 @@ type State = {
   clearNoteTrack: (track: number) => void;
   clearDrumLane: (part: DrumPart) => void;
   hydrate: () => void;
+  exportBackup: () => void;
+  importBackup: (raw: unknown) => boolean;
 };
 
 function emptyScenesSafe(): SceneSlot[] {
   return typeof window === "undefined" ? emptyScenes() : loadScenes();
+}
+
+function applyLive(
+  get: () => State,
+  set: (p: Partial<State>) => void,
+  sc: Scene,
+) {
+  set({
+    layer: "a",
+    patch: sc.layerA,
+    layerA: sc.layerA,
+    layerB: sc.layerB,
+    mixA: sc.mixA,
+    mixB: sc.mixB,
+    stackMode: sc.stackMode,
+    splitNote: sc.splitNote,
+  });
+  putGroove(get, set, sc.groove, false);
+  pushEngine(get);
 }
 
 function shareFx(from: Patch, onto: Patch): Patch {
@@ -376,6 +416,15 @@ export const useSynth = create<State>((set, get) => ({
   midiMap: typeof window === "undefined" ? {} : loadMidiMap(),
   scenes: emptyScenesSafe(),
   activeScene: null,
+  abSnap: null,
+  abOn: false,
+  morphFrom: 0,
+  morphTo: 1,
+  morphAmt: 0,
+  clickOn: false,
+  countIn: false,
+  bounceOn: false,
+  countingIn: false,
   voices: 0,
   cutoffMod: 0,
   octave: 0,
@@ -618,40 +667,114 @@ export const useSynth = create<State>((set, get) => ({
   saveScene: (i) => {
     const s = get();
     const slots = s.scenes.slice();
-    slots[i] = captureScene({
-      layerA: s.layerA,
-      layerB: s.layerB,
-      mixA: s.mixA,
-      mixB: s.mixB,
-      stackMode: s.stackMode,
-      splitNote: s.splitNote,
-      groove: grooveOf(s.patch.groove),
-    });
+    const prev = slots[i];
+    slots[i] = {
+      ...captureScene({
+        layerA: s.layerA,
+        layerB: s.layerB,
+        mixA: s.mixA,
+        mixB: s.mixB,
+        stackMode: s.stackMode,
+        splitNote: s.splitNote,
+        groove: grooveOf(s.patch.groove),
+      }),
+      name: prev?.name ?? `S${i + 1}`,
+    };
     saveScenes(slots);
     set({ scenes: slots, activeScene: i });
   },
   recallScene: (i) => {
     const sc = get().scenes[i];
     if (!sc) return;
-    set({
-      layer: "a",
-      patch: sc.layerA,
-      layerA: sc.layerA,
-      layerB: sc.layerB,
-      mixA: sc.mixA,
-      mixB: sc.mixB,
-      stackMode: sc.stackMode,
-      splitNote: sc.splitNote,
-      activeScene: i,
-    });
-    putGroove(get, set, sc.groove, false);
-    pushEngine(get);
+    applyLive(get, set, sc);
+    set({ activeScene: i, abOn: false });
   },
   clearScene: (i) => {
     const slots = get().scenes.slice();
     slots[i] = null;
     saveScenes(slots);
     set({ scenes: slots, activeScene: get().activeScene === i ? null : get().activeScene });
+  },
+  renameScene: (i, name) => {
+    const slots = get().scenes.slice();
+    if (!slots[i]) return;
+    slots[i] = { ...slots[i]!, name: name.trim().slice(0, 16) };
+    saveScenes(slots);
+    set({ scenes: slots });
+  },
+  storeAb: () => {
+    const s = get();
+    set({
+      abSnap: captureScene({
+        layerA: s.layerA,
+        layerB: s.layerB,
+        mixA: s.mixA,
+        mixB: s.mixB,
+        stackMode: s.stackMode,
+        splitNote: s.splitNote,
+        groove: grooveOf(s.patch.groove),
+      }),
+      abOn: false,
+    });
+  },
+  toggleAb: () => {
+    const s = get();
+    if (!s.abSnap) {
+      get().storeAb();
+      return;
+    }
+    if (!s.abOn) {
+      const live = captureScene({
+        layerA: s.layerA,
+        layerB: s.layerB,
+        mixA: s.mixA,
+        mixB: s.mixB,
+        stackMode: s.stackMode,
+        splitNote: s.splitNote,
+        groove: grooveOf(s.patch.groove),
+      });
+      applyLive(get, set, s.abSnap);
+      set({ abOn: true, abSnap: live });
+    } else {
+      applyLive(get, set, s.abSnap);
+      set({ abOn: false, abSnap: captureScene({
+        layerA: get().layerA,
+        layerB: get().layerB,
+        mixA: get().mixA,
+        mixB: get().mixB,
+        stackMode: get().stackMode,
+        splitNote: get().splitNote,
+        groove: grooveOf(get().patch.groove),
+      }) });
+    }
+  },
+  setMorph: (from, to, amt) => {
+    const s = get();
+    const a = s.scenes[from];
+    const b = s.scenes[to];
+    set({ morphFrom: from, morphTo: to, morphAmt: amt });
+    if (!a || !b || from === to) return;
+    applyLive(get, set, morphScene(a, b, amt));
+  },
+  setClickOn: (on) => {
+    set({ clickOn: on });
+    get().engine?.setClickOn(on);
+  },
+  setCountIn: (on) => set({ countIn: on }),
+  toggleBounce: () => {
+    const engine = bootEngine();
+    const s = get();
+    if (!s.bounceOn) {
+      engine.startBounce();
+      set({ bounceOn: true });
+      return;
+    }
+    const blob = engine.stopBounce();
+    set({ bounceOn: false });
+    if (blob) {
+      const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+      downloadBlob(blob, `lyra-${stamp}.wav`);
+    }
   },
 
   selectLayer: (id) => {
@@ -697,9 +820,20 @@ export const useSynth = create<State>((set, get) => ({
       const g = grooveOf(get().patch.groove);
       if (!g.seqOn && !g.drumsOn) putGroove(get, set, { ...g, seqOn: true, drumsOn: true });
     }
+    if (on && get().countIn) {
+      set({ countingIn: true, groovePlaying: false, grooveStep: -1 });
+      engine.setClickOn(true);
+      engine.countIn(() => {
+        engine.setClickOn(get().clickOn);
+        engine.setGroovePlaying(true);
+        set({ groovePlaying: true, grooveStep: 0, countingIn: false });
+      });
+      return;
+    }
+    if (!on) engine.setClickOn(get().clickOn);
     engine.setGroovePlaying(on);
     if (!on) recOpen.clear();
-    set({ groovePlaying: on, grooveStep: on ? 0 : -1 });
+    set({ groovePlaying: on, grooveStep: on ? 0 : -1, countingIn: false });
   },
 
   setRecMode: (mode) => {
@@ -823,6 +957,41 @@ export const useSynth = create<State>((set, get) => ({
       midiPortId,
       clockFollow,
     });
+  },
+
+  exportBackup: () => {
+    const blob = new Blob([JSON.stringify(collectBackup(), null, 2)], { type: "application/json" });
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    downloadBlob(blob, `lyra-backup-${stamp}.json`);
+  },
+
+  importBackup: (raw) => {
+    if (!applyBackup(raw)) return false;
+    let showKeys = true;
+    let midiPortId = "all";
+    let clockFollow = false;
+    try {
+      showKeys = localStorage.getItem(KEYS_KEY) !== "0";
+      midiPortId = localStorage.getItem(PORT_KEY) || "all";
+      clockFollow = localStorage.getItem(CLOCK_KEY) === "1";
+    } catch {
+      /* */
+    }
+    setMidiPortFilter(midiPortId);
+    set({
+      userPatches: loadUser(),
+      userSequences: loadSeqs(),
+      favorites: loadFavs(),
+      scenes: loadScenes(),
+      midiMap: loadMidiMap(),
+      showKeys,
+      midiPortId,
+      clockFollow,
+      activeScene: null,
+      abSnap: null,
+      abOn: false,
+    });
+    return true;
   },
 }));
 

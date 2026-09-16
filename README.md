@@ -1,4 +1,21 @@
-# LYRA-32 Mk V.1
+# LYRA-32 Mk V.2
+
+Hybrid polyphonic web synthesizer by [Raybridge Digital](https://github.com/raybridgedigital).
+
+Play from a class-compliant USB-C MIDI keyboard, the computer keys (A–L), or the on-screen piano. Chrome / Edge / Firefox.
+
+This tag is the restore point **with** scenes, morph, A/B, bounce-to-wav, backup/restore, and the live cheat-sheet.
+
+## Mk V.2 (v5.2)
+
+- 8 named scene pads, Store / A/B, morph slider, XY Cut×Res
+- Bounce: Wav in the header records the output
+- Fullscreen, groove Click / Count-in
+- Library Backup / Restore (scenes, maps, user patches)
+- Help → Live tab (Mac Option / two-finger clear, what survives refresh)
+- Restore: `git checkout v5.2.0`
+
+## Mk V.1 (v5.1)
 
 Hybrid polyphonic web synthesizer by [Raybridge Digital](https://github.com/raybridgedigital).
 

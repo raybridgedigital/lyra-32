@@ -6,6 +6,7 @@ import { LayerBrand } from "./LayerStrip";
 
 const TABS = [
   { id: "start", label: "Start" },
+  { id: "live", label: "Live" },
   { id: "play", label: "Play" },
   { id: "sound", label: "Sound" },
   { id: "arp", label: "Arp" },
@@ -102,6 +103,7 @@ export function HelpPanel() {
           {tab !== "play" && (
             <div className="absolute inset-0 overflow-y-auto overscroll-contain px-5 py-4" data-modal-scroll>
               {tab === "start" && <StartTab />}
+              {tab === "live" && <LiveTab />}
               {tab === "sound" && <SoundTab />}
               {tab === "arp" && <ArpTab />}
               {tab === "studio" && <StudioTab />}
@@ -165,23 +167,111 @@ function StartTab() {
       <H>Header</H>
       <Ul
         items={[
-          <>Patch menu + arrows + star (favorite).</>,
-          <>Live / Idle — audio engine state. MIDI name appears when a port is open.</>,
-          <>Transpose − / + (left of Live) — shifts every incoming note in semitones, including USB MIDI. Click the number to reset. −24…+24.</>,
-          <>Voice counter — how many notes are sounding, including releases.</>,
-          <>Octave − / + — shifts USB MIDI, computer keys, and the on-screen piano together (also <Kbd>Z</Kbd> / <Kbd>X</Kbd>). Header shows the sounding C of the A key.</>,
-          <>Keyboard icon, Mute, Learn, Stage, DAW, Help, Panic.</>,
-          <>
-            Learn (gold) — click a knob, then move a CK88 knob/fader. That CC now drives the knob. Click Learn again to
-            finish. Maps are saved in this browser.
-          </>,
-          <>
-            Stage (gold) — keeps the screen and audio from napping. Leave it off at home.
-          </>,
-          <>
-            Scenes 1–8 under the layers: click empty to store this sound + groove, click filled to recall. Shift-click
-            overwrites. Alt-click clears. Computer keys 1–8 recall (Shift+number stores).
-          </>,
+          <>Left: MIDI name, Transpose (− / + / click the number to reset), DAW, Learn, Live/Idle.</>,
+          <>Centre: scope + voice count (notes sounding, including releases).</>,
+          <>Right: Tap tempo, BPM, Octave (<Kbd>Z</Kbd> / <Kbd>X</Kbd>), keyboard icon, Mute, Wav, Fullscreen, Stage, Help (?), Panic (Esc).</>,
+        ]}
+      />
+      <P>
+        Gold = on. The easy-to-forget gestures (scenes, Learn, Stage, Shape, groove Click) live in the <strong className="text-fg">Live</strong> tab
+        — open that before a set.
+      </P>
+    </>
+  );
+}
+
+function LiveTab() {
+  return (
+    <>
+      <H>Read this before a set</H>
+      <P>
+        This tab is the cheat sheet. Mac has no Alt key — use <strong className="text-fg">Option</strong> or a two-finger click.
+      </P>
+      <H>Scenes (8 pads under the layers)</H>
+      <Ul
+        items={[
+          <>Empty pad — click to store this sound + both layers + the groove.</>,
+          <>Filled pad — click to recall. Gold = the last one you recalled.</>,
+          <>Double-click a filled pad to name it (Verse, Drop…). Names show on the pad.</>,
+          <>Shift-click — overwrite that pad with what’s playing now (keeps the name).</>,
+          <>Clear — Option-click, Control-click, or right-click / two-finger click.</>,
+          <>Computer keys <Kbd>1</Kbd>–<Kbd>8</Kbd> recall. Shift+number stores. Not while typing in a name field.</>,
+          <>Scenes are saved in this browser. They survive refresh. They do not follow you to another computer.</>,
+        ]}
+      />
+      <H>Store / A/B</H>
+      <Ul
+        items={[
+          <>Store freezes “right now” as the B side (session only — gone after refresh).</>,
+          <>A/B flips stored vs now. Use it for “did I ruin the sound?” not as a numbered scene.</>,
+          <>Click Store first, then A/B. If A/B does nothing, you have not stored yet.</>,
+        ]}
+      />
+      <H>Morph</H>
+      <P>
+        Pick two filled scenes, drag the slider. Knobs (cut, levels, FX, envelopes…) blend. Waves and the groove jump at
+        50%. Empty slots do nothing. Morph writes the faceplate — it does not overwrite the stored pads until you Shift-click
+        save.
+      </P>
+      <H>XY pad</H>
+      <P>Cut on X (left→right), Res on Y (bottom→top). Same as those two knobs. One finger for filter sweeps.</P>
+      <H>Learn (MIDI)</H>
+      <Ul
+        items={[
+          <>Header Learn gold → click a knob (gold ring) → move a CK88 fader/knob. That CC now owns the knob.</>,
+          <>Learn stays on so you can map several knobs. Click Learn again to finish.</>,
+          <>Maps are saved in this browser. CC64 is always sustain. Unmapped CC1 / CC74 still open cutoff.</>,
+          <>Mapped CCs move the actual knob (saved in the patch). The mod-wheel needle on Cut is separate — that is CC1 when not remapped.</>,
+        ]}
+      />
+      <H>Stage</H>
+      <P>
+        Gold = keep this tab awake (screen + audio). Off after refresh. Leave it off at home on 8 GB — it stops Chrome
+        napping the tab. Turn it on before a set, not all day.
+      </P>
+      <H>Wav bounce</H>
+      <Ul
+        items={[
+          <>Wav gold = recording the master output (what you hear).</>,
+          <>Click again to stop and download a .wav (stereo, up to 3 minutes).</>,
+          <>Play, then record. Silence records silence. Panic does not stop the bounce — click Wav again.</>,
+        ]}
+      />
+      <H>Fullscreen</H>
+      <P>The expand icon next to Wav. Esc leaves fullscreen (and Panic is also Esc — leave fullscreen first if you only meant to un-full-screen).</P>
+      <H>Shape</H>
+      <Ul
+        items={[
+          <>Arm must be gold or you hear nothing from the curve. Silk is the default swell, starting at 15%.</>,
+          <>Sh 1 and Sh 2 are two independent curves. Typical live: Sh 1 → Amp, Sh 2 → Cut.</>,
+          <>Click a dest (Amp, Cut, Pos…). Shift-click a dest for a second target on the same curve (gold outline).</>,
+          <>From is a floor under the whole curve, 0–100%. Time is the length of the shape. Depth is how far it moves.</>,
+          <>Env = once per note. Loop = repeats while notes are held. Dest = what the curve moves.</>,
+        ]}
+      />
+      <H>Wavetable drop</H>
+      <P>
+        Drag a .wav onto the Table / Live panes. It becomes the User table (16 frames from the file). Lasts until you
+        refresh — drop it again if you need it after a reload. Osc wave must be Tbl to hear it.
+      </P>
+      <H>Groove click / count-in</H>
+      <Ul
+        items={[
+          <>Click — metronome on quarter notes while the loop runs (accent on bar 1).</>,
+          <>Count — 1 bar of four clicks, then Play starts. Click Stop during the count-in to cancel.</>,
+          <>Turn Seq and/or Drums on, or Play will arm both so you hear something.</>,
+        ]}
+      />
+      <H>Easy to forget (everything else)</H>
+      <Ul
+        items={[
+          <>First click or key unlocks Chrome audio. Live must be gold. Mute must not be gold.</>,
+          <>Knobs drag vertically. Double-click a knob to reset. Gold nameplate (Delay, Ring, Drive…) = bypass; click again to restore the last amount.</>,
+          <>Mod wheel opens cutoff; the Cut knob itself does not move — watch the gold needle and the meter beside Cut.</>,
+          <>Panic / Esc kills stuck notes, arp latch, aftertouch, mod. It is not Mute.</>,
+          <>Transpose click the number to 0. Octave is Z / X and the header C3 display.</>,
+          <>Hold on the arp latches the chord. All keys up, then a new chord, replaces it.</>,
+          <>User patches, favorites, MIDI maps, and scenes live in this browser only. Library → Backup downloads them as a file. Restore that file if Chrome data is wiped.</>,
         ]}
       />
     </>
@@ -202,7 +292,7 @@ function PlayTab() {
         items={[
           <>White: A S D F G H J K L ; '</>,
           <>Octave down / up: Z / X — same octave as USB MIDI. Changing octave while a key is held will not stick a note.</>,
-          <>Panic: Esc. Help: ?. Sliders do not steal the piano keys.</>,
+          <>Panic: Esc. Help: ?. Number keys <Kbd>1</Kbd>–<Kbd>8</Kbd> are scenes, not notes. Sliders do not steal the piano keys.</>,
           <>Typing in Search / Rename / Save still uses the text field, not notes.</>,
         ]}
       />
@@ -211,7 +301,7 @@ function PlayTab() {
         items={[
           <>Class-compliant keyboards (M-Audio, etc.) over USB-C. Chrome, Edge, or Firefox. Not Safari.</>,
           <>Allow MIDI when the browser asks. Status shows the port name when it is connected.</>,
-          <>Pitch wheel bends sounding notes ±2 semitones. Mod wheel (CC1) and CC74 open cutoff — the Cut knob stays put; a gold needle and the Mod meter next to it follow the wheel. CC7 is volume. CC64 sustain.</>,
+          <>Pitch wheel bends sounding notes ±2 semitones. Mod wheel (CC1) and CC74 open cutoff — the Cut knob stays put; a gold needle and the Mod meter next to it follow the wheel. CC7 is volume. CC64 sustain. Learn can steal any other CC for a knob.</>,
           <>Channel or poly aftertouch feeds matrix source AT — route it to cutoff, pitch, amp, and so on.</>,
         ]}
       />
@@ -305,7 +395,8 @@ function ArpTab() {
         stay an 8-lane 16th grid (kick, snare, hats, clap, lo/hi tom, perc). M mutes anytime; R arms for rec. Save the
         sequence under User — name it, rename, or delete, same as a patch. Factory Grooves land on track 1; Phrases load
         into armed note tracks. C1–D#2 paint armed drum lanes while Rec is on (F1–D2 are the toms). Undo / Redo step
-        through rec takes, clears, and factory loads.
+        through rec takes, clears, and factory loads. Click = quarter-note metronome while playing. Count = 1 bar of
+        clicks, then the loop starts (Stop cancels the count-in). Wav in the header records the output to a file.
       </P>
       <H>16-step pattern</H>
       <P>
@@ -372,6 +463,11 @@ function StudioTab() {
 function FaqTab() {
   return (
     <>
+      <H>Backup</H>
+      <P>
+        Library → Backup downloads scenes, MIDI maps, user patches, favorites, and sequences as a JSON file. Keep a copy
+        on the Mac. Restore replaces what is in this browser with that file. Store / A/B is not in the backup.
+      </P>
       <H>No sound</H>
       <Ul
         items={[
@@ -400,10 +496,10 @@ function AboutTab() {
     <>
       <H>LYRA-32</H>
       <P>
-        by Ray Bridge Digital · Mk V.1 · Version 5.1. 32-voice hybrid synthesizer for Chrome, Edge, and Firefox. Dual
+        by Ray Bridge Digital · Mk V.2 · Version 5.2. 32-voice hybrid synthesizer for Chrome, Edge, and Firefox. Dual
         oscillator + sub + noise, dual LFO, 6-slot matrix, FX rack, arpeggiator with 16-step pattern, two-layer stack /
-        split, and a groovebox (4 MIDI takes + 8-lane drums). USB-C MIDI, computer keys, or the on-screen piano. Not a
-        VST/AU — DAW mode uses IAC MIDI.
+        split, a groovebox, drawn Shape (×2), scenes, MIDI learn, and bounce-to-wav. USB-C MIDI, computer keys, or the
+        on-screen piano. Not a VST/AU — DAW mode uses IAC MIDI. Open Help → Live for the stage cheat sheet.
       </P>
       <div className="lyra-about-brand">
         <LayerBrand />
