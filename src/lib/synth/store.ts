@@ -356,13 +356,30 @@ function hookMidi(engine: LyraEngine) {
   }, 350);
 }
 
+let htmlKeep: HTMLAudioElement | null = null;
+
+function isTouchIos() {
+  if (typeof navigator === "undefined") return false;
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+}
+
 function unlockHtml() {
   try {
-    const a = new Audio(
-      "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA",
-    );
-    a.volume = 0.01;
-    void a.play();
+    if (!htmlKeep) {
+      const a = new Audio(
+        "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA",
+      );
+      a.loop = true;
+      a.volume = 0.001;
+      a.setAttribute("playsinline", "true");
+      a.setAttribute("webkit-playsinline", "true");
+      htmlKeep = a;
+    }
+    void htmlKeep.play();
+    if (navigator.mediaSession) {
+      navigator.mediaSession.playbackState = "playing";
+      navigator.mediaSession.metadata = new MediaMetadata({ title: "LYRA-32", artist: "Ray Bridge Digital" });
+    }
   } catch {
     /* */
   }
@@ -385,7 +402,7 @@ function bootEngine(): LyraEngine {
   engine.applyPatch(useSynth.getState().patch);
   useSynth.setState({ engine, armed: true, ctxState: engine.ctx.state, audioSinkOk: engine.canSetSink() });
   const sink = useSynth.getState().audioOutputId;
-  if (sink) void engine.setSink(sink).catch(() => { /* */ });
+  if (sink && !isTouchIos()) void engine.setSink(sink).catch(() => { /* */ });
   pushEngine(() => useSynth.getState());
   hookMidi(engine);
 

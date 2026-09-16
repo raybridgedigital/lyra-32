@@ -867,6 +867,7 @@ export type EngineListener = {
 export class LyraEngine {
   ctx: AudioContext;
   analyser: AnalyserNode;
+  private iosEl: HTMLAudioElement | null = null;
   private patch: Patch = clonePatch(INIT_PATCH);
   private voices: Voice[] = [];
   private held = new Map<number, Voice[] | "arp">();
@@ -1035,6 +1036,7 @@ export class LyraEngine {
     master.connect(limiter);
     limiter.connect(analyser);
     analyser.connect(ctx.destination);
+    this.hookIosSpeaker(analyser);
 
     this.analyser = analyser;
     this.buses = {
@@ -1112,6 +1114,36 @@ export class LyraEngine {
     kickContext(this.ctx);
     await ctx.setSinkId(id);
     return true;
+  }
+
+  private hookIosSpeaker(analyser: AnalyserNode) {
+    if (typeof navigator === "undefined") return;
+    const ios =
+      /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    if (!ios) return;
+    try {
+      analyser.disconnect(this.ctx.destination);
+    } catch {
+      /* */
+    }
+    const dest = this.ctx.createMediaStreamDestination();
+    analyser.connect(dest);
+    const el = document.createElement("audio");
+    el.autoplay = true;
+    el.preload = "auto";
+    el.controls = false;
+    el.muted = false;
+    el.volume = 1;
+    el.setAttribute("playsinline", "true");
+    el.setAttribute("webkit-playsinline", "true");
+    el.srcObject = dest.stream;
+    el.style.cssText = "position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;left:0;bottom:0";
+    document.body.appendChild(el);
+    void el.play().catch(() => {
+      /* next resume() */
+    });
+    this.iosEl = el;
   }
 
   private startShClock() {
@@ -1421,6 +1453,9 @@ export class LyraEngine {
 
   resume() {
     kickContext(this.ctx);
+    void this.iosEl?.play().catch(() => {
+      /* */
+    });
   }
 
   private advanceMono() {
