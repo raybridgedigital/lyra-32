@@ -4,6 +4,8 @@ Hybrid polyphonic web synthesizer by [Raybridge Digital](https://github.com/rayb
 
 Play from a class-compliant USB-C MIDI keyboard, the computer keys (A–L), or the on-screen piano. Chrome / Edge / Firefox.
 
+**Play it:** [raybridgedigital.github.io/lyra-32](https://raybridgedigital.github.io/lyra-32/) (GitHub Pages — open in a full Chrome tab).
+
 This tag is the restore point **with** scenes, morph, A/B, bounce-to-wav, backup/restore, and the live cheat-sheet.
 
 ## Mk V.2 (v5.2)

@@ -145,16 +145,27 @@ function authPopupPlugin(): Plugin {
 // `0.0.0.0:8080` is the live-preview contract — don't change host/port.
 // The dev server starts once `src/router.tsx` and `src/routes/` exist — see
 // AGENTS.md § "First scaffold".
-export default defineConfig(({ command, isPreview }) => ({
+export default defineConfig(({ command, isPreview }) => {
+  const pages = process.env.PAGES === "1";
+  return {
+  base: pages ? "/lyra-32/" : "/",
   server: {
     host: "0.0.0.0",
     port: 8080,
     strictPort: true,
+    headers: {
+      "Permissions-Policy": "speaker-selection=*, midi=*",
+      "Feature-Policy": "speaker-selection *",
+    },
   },
   preview: {
     host: "127.0.0.1",
     port: 8081,
     strictPort: true,
+    headers: {
+      "Permissions-Policy": "speaker-selection=*, midi=*",
+      "Feature-Policy": "speaker-selection *",
+    },
   },
   resolve: { tsconfigPaths: true },
   plugins: [
@@ -166,18 +177,18 @@ export default defineConfig(({ command, isPreview }) => ({
     // PWA head + ?install=1 tutorial page; runs before Start/Nitro.
     grokPwaPlugin(),
     tailwindcss(),
-    tanstackStart(),
-    ...(command === "build" || isPreview
-      ? [
-          nitro({
-            preset: "vercel",
-            // Auto-registers server/middleware/* (the PWA install page +
-            // manifest + head-tag middleware). Nitro v3 defaults serverDir to
-            // false, so removing this silently unwires /?install=1 on deploys.
-            serverDir: "./server",
-          }),
-        ]
-      : []),
+    tanstackStart(pages ? { spa: { enabled: true } } : {}),
+    ...(pages
+      ? []
+      : command === "build" || isPreview
+        ? [
+            nitro({
+              preset: "vercel",
+              serverDir: "./server",
+            }),
+          ]
+        : []),
     viteReact(),
   ],
-}));
+};
+});

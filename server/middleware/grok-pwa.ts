@@ -53,6 +53,7 @@ function injectHeadStreaming(response: Response, host: string): Response {
   );
   const headers = new Headers(response.headers);
   headers.delete("content-length");
+  headers.set("Permissions-Policy", "speaker-selection=*, midi=*");
   return new Response(transformed, {
     status: response.status,
     statusText: response.statusText,

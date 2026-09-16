@@ -17,6 +17,7 @@ const SEQ_KEY = "lyra32-user-sequences";
 const KEYS_KEY = "lyra32-show-keys";
 const PORT_KEY = "lyra32-midi-port";
 const CLOCK_KEY = "lyra32-clock-follow";
+const SINK_KEY = "lyra32-audio-sink";
 const FAV_KEY = "lyra32-favorites";
 
 function loadUser(): Patch[] {
@@ -111,6 +112,11 @@ type State = {
   midiName: string | null;
   midiPorts: MidiPortInfo[];
   midiPortId: string;
+  audioOutputs: { id: string; label: string }[];
+  audioOutputId: string;
+  audioSinkOk: boolean;
+  audioPickOk: boolean;
+  audioSinkMsg: string;
   clockBpm: number | null;
   clockRunning: boolean;
   clockFollow: boolean;
@@ -165,6 +171,9 @@ type State = {
   toggleMute: () => void;
   toggleKeys: () => void;
   setMidiPort: (id: string) => void;
+  refreshAudioOutputs: () => Promise<void>;
+  setAudioOutput: (id: string) => Promise<void>;
+  pickAudioOutput: () => Promise<void>;
   setClockFollow: (on: boolean) => void;
   setDawOpen: (on: boolean) => void;
   setHelpOpen: (on: boolean) => void;
@@ -374,7 +383,9 @@ function bootEngine(): LyraEngine {
     onState: (ctxState) => useSynth.setState({ ctxState, armed: ctxState === "running" || useSynth.getState().armed }),
   });
   engine.applyPatch(useSynth.getState().patch);
-  useSynth.setState({ engine, armed: true, ctxState: engine.ctx.state });
+  useSynth.setState({ engine, armed: true, ctxState: engine.ctx.state, audioSinkOk: engine.canSetSink() });
+  const sink = useSynth.getState().audioOutputId;
+  if (sink) void engine.setSink(sink).catch(() => { /* */ });
   pushEngine(() => useSynth.getState());
   hookMidi(engine);
 
@@ -405,6 +416,11 @@ export const useSynth = create<State>((set, get) => ({
   midiName: null,
   midiPorts: [],
   midiPortId: "all",
+  audioOutputs: [],
+  audioOutputId: typeof window === "undefined" ? "" : localStorage.getItem(SINK_KEY) || "",
+  audioSinkOk: false,
+  audioPickOk: false,
+  audioSinkMsg: "",
   clockBpm: null,
   clockRunning: false,
   clockFollow: false,
@@ -643,6 +659,79 @@ export const useSynth = create<State>((set, get) => ({
     set({ midiPortId });
   },
 
+  refreshAudioOutputs: async () => {
+    const pick = typeof (navigator.mediaDevices as MediaDevices & { selectAudioOutput?: unknown })?.selectAudioOutput === "function";
+    const engine = get().engine;
+    const ok = engine?.canSetSink() ?? typeof (AudioContext.prototype as { setSinkId?: unknown }).setSinkId === "function";
+    let audioOutputs: { id: string; label: string }[] = [];
+    try {
+      const all = (await navigator.mediaDevices?.enumerateDevices()) ?? [];
+      audioOutputs = all
+        .filter((d) => d.kind === "audiooutput")
+        .map((d, i) => ({
+          id: d.deviceId,
+          label: d.label || (d.deviceId === "default" || !d.deviceId ? "System default" : `Output ${i + 1}`),
+        }));
+    } catch {
+      /* */
+    }
+    set({
+      audioOutputs,
+      audioSinkOk: ok,
+      audioPickOk: pick,
+      audioSinkMsg: pick
+        ? get().audioSinkMsg
+        : "This tab cannot list speakers. LYRA follows  → System Settings → Sound (MacBook Speakers or CK Series).",
+    });
+  },
+
+  setAudioOutput: async (id) => {
+    const engine = bootEngine();
+    try {
+      localStorage.setItem(SINK_KEY, id);
+    } catch {
+      /* */
+    }
+    set({ audioOutputId: id });
+    try {
+      await engine.setSink(id);
+    } catch (e) {
+      set({ audioSinkMsg: e instanceof Error ? e.message : "Could not switch speaker." });
+    }
+    await get().refreshAudioOutputs();
+  },
+
+  pickAudioOutput: async () => {
+    const md = navigator.mediaDevices as MediaDevices & {
+      selectAudioOutput?: () => Promise<{ deviceId: string; label: string }>;
+    };
+    if (typeof md.selectAudioOutput !== "function") {
+      set({
+        audioPickOk: false,
+        audioSinkMsg:
+          "This tab cannot list speakers (Chrome hid the picker). Use  → System Settings → Sound — MacBook Speakers or CK Series. LYRA already follows that.",
+      });
+      return;
+    }
+    set({ audioSinkMsg: "Waiting for Chrome’s speaker list…" });
+    try {
+      const info = await md.selectAudioOutput();
+      bootEngine();
+      await get().setAudioOutput(info.deviceId);
+      set({ audioSinkMsg: info.label ? `Output: ${info.label}` : "Output set." });
+    } catch (e) {
+      const name = e instanceof DOMException ? e.name : "";
+      if (name === "AbortError" || name === "NotFoundError") {
+        set({ audioSinkMsg: "No speaker picked." });
+      } else {
+        set({
+          audioSinkMsg:
+            "Chrome blocked the speaker list. Use  → System Settings → Sound, or allow Speakers in the address-bar padlock.",
+        });
+      }
+    }
+  },
+
   setClockFollow: (on) => {
     try {
       localStorage.setItem(CLOCK_KEY, on ? "1" : "0");
@@ -654,7 +743,10 @@ export const useSynth = create<State>((set, get) => ({
     s.engine?.setHostTempo(on ? s.clockBpm : null);
   },
 
-  setDawOpen: (on) => set({ dawOpen: on, helpOpen: on ? false : get().helpOpen }),
+  setDawOpen: (on) => {
+    set({ dawOpen: on, helpOpen: on ? false : get().helpOpen });
+    if (on) void get().refreshAudioOutputs();
+  },
   setHelpOpen: (on) => set({ helpOpen: on, dawOpen: on ? false : get().dawOpen }),
   setStageLock: (on) => {
     set({ stageLock: on });

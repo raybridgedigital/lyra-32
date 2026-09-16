@@ -1102,6 +1102,18 @@ export class LyraEngine {
     return this.ctx;
   }
 
+  canSetSink() {
+    return typeof (this.ctx as AudioContext & { setSinkId?: unknown }).setSinkId === "function";
+  }
+
+  async setSink(id: string) {
+    const ctx = this.ctx as AudioContext & { setSinkId?: (s: string) => Promise<void> };
+    if (typeof ctx.setSinkId !== "function") return false;
+    kickContext(this.ctx);
+    await ctx.setSinkId(id);
+    return true;
+  }
+
   private startShClock() {
     if (this.shTimer != null) return;
     this.shLast = performance.now();
