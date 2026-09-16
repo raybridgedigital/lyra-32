@@ -1,7 +1,6 @@
 import { Cable, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { isIacPort } from "@/lib/synth/midi";
-import { isIosTouch } from "@/lib/synth/engine";
 import { useSynth } from "@/lib/synth/store";
 import { useOverlayScrollLock } from "./HelpPanel";
 
@@ -16,8 +15,6 @@ export function DawPanel() {
   const setAudioOutput = useSynth((s) => s.setAudioOutput);
   const pickAudioOutput = useSynth((s) => s.pickAudioOutput);
   const audioSinkMsg = useSynth((s) => s.audioSinkMsg);
-  const iosLowLat = useSynth((s) => s.iosLowLat);
-  const setIosLowLat = useSynth((s) => s.setIosLowLat);
   const clockBpm = useSynth((s) => s.clockBpm);
   const clockRunning = useSynth((s) => s.clockRunning);
   const clockFollow = useSynth((s) => s.clockFollow);
@@ -107,23 +104,6 @@ export function DawPanel() {
               Choose output…
             </button>
             {audioSinkMsg ? <p className="mt-2 text-sm text-muted">{audioSinkMsg}</p> : null}
-            {typeof window !== "undefined" && isIosTouch() ? (
-              <>
-                <button
-                  type="button"
-                  className={cn(
-                    "mt-3 h-10 rounded-md px-3 text-sm font-semibold",
-                    iosLowLat ? "bg-accent text-accent-fg" : "bg-elevated text-muted",
-                  )}
-                  onClick={() => setIosLowLat(!iosLowLat)}
-                >
-                  Low lat {iosLowLat ? "on" : "off"}
-                </button>
-                <p className="mt-2 text-sm text-muted">
-                  On = shorter USB path (closer to Mac). Off if iPad speakers go silent.
-                </p>
-              </>
-            ) : null}
 
             <div className="mt-4 flex items-center gap-3">
               <button

@@ -414,7 +414,6 @@ function bootEngine(): LyraEngine {
   useSynth.setState({ engine, armed: true, ctxState: engine.ctx.state, audioSinkOk: engine.canSetSink() });
   const sink = useSynth.getState().audioOutputId;
   if (sink && !isTouchIos()) void engine.setSink(sink).catch(() => { /* */ });
-  if (useSynth.getState().iosLowLat) engine.setIosLowLat(true);
   pushEngine(() => useSynth.getState());
   hookMidi(engine);
 
