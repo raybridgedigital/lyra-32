@@ -62,54 +62,87 @@ type PatchIn = Omit<Partial<Patch>, "osc1" | "osc2" | "fx" | "lfo2" | "matrix" |
 
 export function patch(partial: PatchIn): Patch {
   const { osc1: o1, osc2: o2, ...rest } = partial;
-  return normalizePatch({
-    subLevel: 0.1,
-    noiseLevel: 0,
-    fmIndex: 0,
-    ring: 0,
-    sync: 0,
-    drift: 0,
-    velFilt: 0,
-    velAmp: 0,
-    drive: 0.1,
-    filter: { type: "lowpass", slope: 24, cutoff: 0.55, resonance: 0.18, envAmount: 0.25, keyTrack: 0.3, tone: 0.5 },
-    ampEnv: { attack: 0.01, decay: 0.25, sustain: 0.65, release: 0.25 },
-    filterEnv: { attack: 0.01, decay: 0.22, sustain: 0.3, release: 0.2 },
-    lfo: { rate: 0.35, depth: 0.08, dest: "cutoff", wave: "sine", fade: 0 },
-    lfo2: defaultLfo2(),
-    matrix: emptyMatrix(),
-    fx: { delayMix: 0.12, delayTime: 0.28, delayFeedback: 0.28, reverbMix: 0.18, chorusMix: 0.08, phaserMix: 0 },
-    unison: { voices: 1, detune: 0.1, spread: 0.3 },
-    glide: 0,
-    polyMode: "poly",
-    master: 0.7,
-    arp: {
-      on: false,
-      hold: false,
-      pattern: false,
-      mode: "up",
-      rate: "1/16",
-      octaves: 1,
-      gate: 0.5,
-      swing: 0,
-      tempo: 120,
-      steps: defaultArpSteps(),
-    },
-    groove: defaultGroove(),
-    drawShape: defaultDrawShape(),
-    drawShape2: defaultDrawShape2(),
-    ...rest,
-    osc1: osc(o1),
-    osc2: osc({
-      wave: "sawtooth",
-      octave: 0,
-      semitone: 0,
-      fine: 7,
-      level: 0,
-      pwm: 0.5,
-      ...o2,
-    }),
-  } as Patch);
+  return foldMaster(
+    normalizePatch({
+      subLevel: 0.1,
+      noiseLevel: 0,
+      fmIndex: 0,
+      ring: 0,
+      sync: 0,
+      drift: 0,
+      velFilt: 0,
+      velAmp: 0,
+      drive: 0.1,
+      filter: { type: "lowpass", slope: 24, cutoff: 0.55, resonance: 0.18, envAmount: 0.25, keyTrack: 0.3, tone: 0.5 },
+      ampEnv: { attack: 0.01, decay: 0.25, sustain: 0.65, release: 0.25 },
+      filterEnv: { attack: 0.01, decay: 0.22, sustain: 0.3, release: 0.2 },
+      lfo: { rate: 0.35, depth: 0.08, dest: "cutoff", wave: "sine", fade: 0 },
+      lfo2: defaultLfo2(),
+      matrix: emptyMatrix(),
+      fx: { delayMix: 0.12, delayTime: 0.28, delayFeedback: 0.28, reverbMix: 0.18, chorusMix: 0.08, phaserMix: 0 },
+      unison: { voices: 1, detune: 0.1, spread: 0.3 },
+      glide: 0,
+      polyMode: "poly",
+      master: 0.7,
+      arp: {
+        on: false,
+        hold: false,
+        pattern: false,
+        mode: "up",
+        rate: "1/16",
+        octaves: 1,
+        gate: 0.5,
+        swing: 0,
+        tempo: 120,
+        steps: defaultArpSteps(),
+      },
+      groove: defaultGroove(),
+      drawShape: defaultDrawShape(),
+      drawShape2: defaultDrawShape2(),
+      ...rest,
+      osc1: osc(o1),
+      osc2: osc({
+        wave: "sawtooth",
+        octave: 0,
+        semitone: 0,
+        fine: 7,
+        level: 0,
+        pwm: 0.5,
+        ...o2,
+      }),
+    } as Patch),
+  );
+}
+
+/** Fold leftover Out into osc/sub/noise levels. master becomes 1. Safe to call twice. */
+export function foldMaster(p: Patch): Patch {
+  const m = Number(p.master);
+  const scale = Number.isFinite(m) ? Math.max(0, Math.min(1, m)) : 1;
+  const clamp01 = (n: number) => Math.max(0, Math.min(1, n));
+  let next: Patch = p;
+  if (Math.abs(scale - 1) > 0.0005) {
+    next = {
+      ...p,
+      osc1: { ...p.osc1, level: clamp01(p.osc1.level * scale) },
+      osc2: { ...p.osc2, level: clamp01(p.osc2.level * scale) },
+      subLevel: clamp01(p.subLevel * scale),
+      noiseLevel: clamp01(p.noiseLevel * scale),
+      master: 1,
+    };
+  } else if (p.master !== 1) {
+    next = { ...p, master: 1 };
+  }
+  const stacked = next.stack?.b?.patch;
+  if (stacked) {
+    next = {
+      ...next,
+      stack: {
+        ...next.stack!,
+        b: { ...next.stack!.b, patch: foldMaster(stacked) },
+      },
+    };
+  }
+  return next;
 }
 
 export function normalizePatch(p: Patch): Patch {

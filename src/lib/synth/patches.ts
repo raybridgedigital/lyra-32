@@ -1,11 +1,11 @@
 import type { Patch } from "./types";
-import { clonePatch, mx, patch } from "./patch-kit";
+import { clonePatch, mx, patch, foldMaster } from "./patch-kit";
 import { EXTRA_FACTORY } from "./factory-extra";
 import { EXTRA_V43 } from "./factory-v43";
 import { EXTRA_ERA } from "./factory-era";
 import { CATEGORY_ORDER } from "./patch-kit";
 
-export { clonePatch, CATEGORY_ORDER };
+export { clonePatch, foldMaster, CATEGORY_ORDER };
 
 const baseFx = {
   delayMix: 0.12,

@@ -3,6 +3,7 @@ import { CircleHelp, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useSynth } from "@/lib/synth/store";
 import { LayerBrand } from "./LayerStrip";
+import { DawSetup } from "./DawPanel";
 
 const TABS = [
   { id: "start", label: "Start" },
@@ -11,6 +12,7 @@ const TABS = [
   { id: "sound", label: "Sound" },
   { id: "arp", label: "Arp" },
   { id: "studio", label: "Studio" },
+  { id: "daw", label: "MIDI/DAW" },
   { id: "faq", label: "FAQ" },
   { id: "about", label: "About" },
 ] as const;
@@ -107,6 +109,7 @@ export function HelpPanel() {
               {tab === "sound" && <SoundTab />}
               {tab === "arp" && <ArpTab />}
               {tab === "studio" && <StudioTab />}
+              {tab === "daw" && <DawSetup />}
               {tab === "faq" && <FaqTab />}
               {tab === "about" && <AboutTab />}
             </div>
@@ -211,7 +214,7 @@ function StartTab() {
       <H>Header</H>
       <Ul
         items={[
-          <>Left: MIDI name, Transpose (− / + / click the number to reset), DAW, Learn, Live/Idle.</>,
+          <>Left: Vol (master, not in the patch — CK volume / CC7). Transpose (− / + / click the number to reset). Mac: Learn, Live/Idle. iPad: Learn is in ⋯. MIDI name is Help → MIDI/DAW.</>,
           <>Centre: scope + voice count (notes sounding, including releases).</>,
           <>Right: Tap tempo, BPM, Octave (<Kbd>Z</Kbd> / <Kbd>X</Kbd>), keyboard icon, Mute, Wav, Fullscreen, Stage, Help (?), Panic (Esc).</>,
         ]}
@@ -266,8 +269,12 @@ function LiveTab() {
           <>Learn stays on so you can map several knobs. Click Learn again to finish.</>,
           <>Maps are saved in this browser. CC64 is always sustain. Unmapped CC1 / CC74 still open cutoff.</>,
           <>Mapped CCs move the actual knob (saved in the patch). The mod-wheel needle on Cut is separate — that is CC1 when not remapped.</>,
+          <>CK volume / CC7 moves header Vol (not the old Out, which is hidden in the patch).</>,
         ]}
       />
+      <P>
+        Keyboard name and ports live in <strong className="text-fg">MIDI/DAW</strong> — open that tab if the CK is silent.
+      </P>
       <H>Stage</H>
       <P>
         Gold = keep this tab awake (screen + audio). Off after refresh. Leave it off at home on 8 GB — it stops Chrome
@@ -543,7 +550,7 @@ function AboutTab() {
     <>
       <H>LYRA-32</H>
       <P>
-        by Ray Bridge Digital · Mk V.5 · Version 5.5. 32-voice hybrid synthesizer for Chrome, Edge, and Firefox. Dual
+        by Ray Bridge Digital · Mk V.6 · Version 5.6. 32-voice hybrid synthesizer for Chrome, Edge, and Firefox. Dual
         oscillator + sub + noise, dual LFO, 6-slot matrix, FX rack, arpeggiator with 16-step pattern, two-layer stack /
         split, a groovebox, drawn Shape (×2), scenes, MIDI learn, and bounce-to-wav. USB-C MIDI, computer keys, or the
         on-screen piano. Not a VST/AU — DAW mode uses IAC MIDI. Open Help → Live for the stage cheat sheet.

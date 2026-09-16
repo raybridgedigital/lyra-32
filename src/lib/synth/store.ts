@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type { LayerId, LayerMix, MidiStatus, Patch, StackMode } from "./types";
-import { FACTORY, INIT_PATCH, clonePatch } from "./patches";
+import { FACTORY, INIT_PATCH, clonePatch, foldMaster } from "./patches";
 import { LyraEngine, createEngine } from "./engine";
 import { QWERTY_MAP, connectMidi, setMidiPortFilter, type MidiPortInfo } from "./midi";
 import { defaultMix } from "./stack";
@@ -18,6 +18,17 @@ const KEYS_KEY = "lyra32-show-keys";
 const PORT_KEY = "lyra32-midi-port";
 const CLOCK_KEY = "lyra32-clock-follow";
 const SINK_KEY = "lyra32-audio-sink";
+const VOL_KEY = "lyra32-vol";
+
+function loadVol() {
+  try {
+    const n = Number(localStorage.getItem(VOL_KEY));
+    if (Number.isFinite(n)) return Math.max(0, Math.min(1, n));
+  } catch {
+    /* */
+  }
+  return 0.85;
+}
 const IOS_LOW_KEY = "lyra32-ios-lowlat";
 const FAV_KEY = "lyra32-favorites";
 
@@ -30,7 +41,7 @@ function loadUser(): Patch[] {
     if (!Array.isArray(parsed)) return [];
     return parsed.flatMap((p) => {
       try {
-        return [clonePatch(p)];
+        return [foldMaster(clonePatch(p))];
       } catch {
         return [];
       }
@@ -119,6 +130,7 @@ type State = {
   audioPickOk: boolean;
   audioSinkMsg: string;
   iosLowLat: boolean;
+  outputVol: number;
   clockBpm: number | null;
   clockRunning: boolean;
   clockFollow: boolean;
@@ -177,6 +189,7 @@ type State = {
   setAudioOutput: (id: string) => Promise<void>;
   pickAudioOutput: () => Promise<void>;
   setIosLowLat: (on: boolean) => void;
+  setOutputVol: (v: number) => void;
   setClockFollow: (on: boolean) => void;
   setDawOpen: (on: boolean) => void;
   setHelpOpen: (on: boolean) => void;
@@ -224,11 +237,13 @@ function applyLive(
   set: (p: Partial<State>) => void,
   sc: Scene,
 ) {
+  const layerA = foldMaster(sc.layerA);
+  const layerB = foldMaster(sc.layerB);
   set({
     layer: "a",
-    patch: sc.layerA,
-    layerA: sc.layerA,
-    layerB: sc.layerB,
+    patch: layerA,
+    layerA,
+    layerB,
     mixA: sc.mixA,
     mixB: sc.mixB,
     stackMode: sc.stackMode,
@@ -338,8 +353,7 @@ function hookMidi(engine: LyraEngine) {
           useSynth.setState({ cutoffMod: value });
         }
         if (ctl === 7) {
-          const p = clonePatch(useSynth.getState().patch, { master: value });
-          useSynth.getState().setPatch(p);
+          useSynth.getState().setOutputVol(value);
         }
       },
       pitchBend: (semis) => {
@@ -414,6 +428,7 @@ function bootEngine(): LyraEngine {
     onState: (ctxState) => useSynth.setState({ ctxState, armed: ctxState === "running" || useSynth.getState().armed }),
   });
   engine.applyPatch(useSynth.getState().patch);
+  engine.setOutputVol(useSynth.getState().outputVol);
   useSynth.setState({ engine, armed: true, ctxState: engine.ctx.state, audioSinkOk: engine.canSetSink() });
   const sink = useSynth.getState().audioOutputId;
   if (sink && !isTouchIos()) void engine.setSink(sink).catch(() => { /* */ });
@@ -453,6 +468,7 @@ export const useSynth = create<State>((set, get) => ({
   audioPickOk: false,
   audioSinkMsg: "",
   iosLowLat: typeof window === "undefined" ? false : localStorage.getItem(IOS_LOW_KEY) === "1",
+  outputVol: typeof window === "undefined" ? 0.85 : loadVol(),
   clockBpm: null,
   clockRunning: false,
   clockFollow: false,
@@ -494,22 +510,23 @@ export const useSynth = create<State>((set, get) => ({
   },
 
   loadPatch: (p) => {
-    const stacked = p.stack?.b?.patch;
+    const src = foldMaster(p);
+    const stacked = src.stack?.b?.patch;
     if (stacked) {
-      const a = clonePatch({ ...p, stack: undefined });
+      const a = clonePatch({ ...src, stack: undefined });
       const b = shareFx(a, clonePatch({ ...stacked, stack: undefined }));
       set({
         layer: "a",
         patch: a,
         layerA: a,
         layerB: b,
-        mixA: { on: p.stack!.a.on, level: p.stack!.a.level, pan: p.stack!.a.pan },
-        mixB: { on: p.stack!.b.on, level: p.stack!.b.level, pan: p.stack!.b.pan },
-        stackMode: p.stack!.mode,
-        splitNote: p.stack!.splitNote,
+        mixA: { on: src.stack!.a.on, level: src.stack!.a.level, pan: src.stack!.a.pan },
+        mixB: { on: src.stack!.b.on, level: src.stack!.b.level, pan: src.stack!.b.pan },
+        stackMode: src.stack!.mode,
+        splitNote: src.stack!.splitNote,
       });
     } else {
-      const next = clonePatch({ ...p, stack: undefined });
+      const next = clonePatch({ ...src, stack: undefined });
       const s = get();
       if (s.layer === "b") {
         const layerB = shareFx(s.layerA, next);
@@ -540,14 +557,14 @@ export const useSynth = create<State>((set, get) => ({
     const s = get();
     const id = `user-${Date.now()}`;
     const label = name.trim() || "User patch";
-    let p = clonePatch(s.layerA, { id, name: label, category: "User", stack: undefined });
+    let p = foldMaster(clonePatch(s.layerA, { id, name: label, category: "User", stack: undefined }));
     if (s.mixB.on) {
       p = clonePatch(p, {
         stack: {
           mode: s.stackMode,
           splitNote: s.splitNote,
           a: s.mixA,
-          b: { ...s.mixB, patch: clonePatch({ ...s.layerB, stack: undefined }) },
+          b: { ...s.mixB, patch: foldMaster(clonePatch({ ...s.layerB, stack: undefined })) },
         },
       });
     }
@@ -741,6 +758,17 @@ export const useSynth = create<State>((set, get) => ({
     }
     set({ iosLowLat: on });
     get().engine?.setIosLowLat(on);
+  },
+
+  setOutputVol: (v) => {
+    const n = Math.max(0, Math.min(1, v));
+    try {
+      localStorage.setItem(VOL_KEY, String(n));
+    } catch {
+      /* */
+    }
+    set({ outputVol: n });
+    get().engine?.setOutputVol(n);
   },
 
   pickAudioOutput: async () => {

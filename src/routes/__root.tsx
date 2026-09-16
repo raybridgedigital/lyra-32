@@ -3,7 +3,7 @@ import { AuthProvider } from "@/lib/auth/provider";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import appCss from "../styles.css?url";
 
-const APP_NAME = "LYRA-32 Mk V.5";
+const APP_NAME = "LYRA-32 Mk V.6";
 
 export const Route = createRootRoute({
   head: () => ({
@@ -15,7 +15,7 @@ export const Route = createRootRoute({
       {
         name: "description",
         content:
-          "LYRA-32 Mk V.5 hybrid flagship synthesizer. Scenes, morph, MIDI learn, dual Shape, wavetable, groovebox. USB-C MIDI, computer keys, or on-screen piano.",
+          "LYRA-32 Mk V.6 hybrid flagship synthesizer. Scenes, morph, MIDI learn, dual Shape, wavetable, groovebox. USB-C MIDI, computer keys, or on-screen piano.",
       },
     ],
     links: [

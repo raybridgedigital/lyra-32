@@ -1,4 +1,4 @@
-# LYRA-32 Mk V.5
+# LYRA-32 Mk V.6
 
 Hybrid polyphonic web synthesizer by [Raybridge Digital](https://github.com/raybridgedigital).
 
@@ -6,7 +6,15 @@ Play from a class-compliant USB-C MIDI keyboard, the computer keys (A–L), or t
 
 **Play it:** [raybridgedigital.github.io/lyra-32](https://raybridgedigital.github.io/lyra-32/) (GitHub Pages — open in a full Chrome tab).
 
-This tag is the restore point **with** iPad MIDIWeb header, Panic/Tap flash, iPad pitch-bend ignored.
+This tag is the restore point **with** header Vol, Out folded into patches, MIDI/DAW in Help.
+
+## Mk V.6 (v5.6)
+
+- Header Vol (not in the patch). CK CC7. Out knob removed; factory Out baked into osc/sub/noise.
+- Help → MIDI/DAW (keyboard name, ports, IAC). DAW button off the header.
+- iPad header: ⋯, Stage, Live left of scope, MIDIWeb safe-area. Mac header unchanged aside from Vol / no DAW.
+- Android 8 voices. Mac/iPad 32. iPad ignores pitch-bend MIDI.
+- Restore: `git checkout v5.6.0`
 
 ## Mk V.5 (v5.5)
 

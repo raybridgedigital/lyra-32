@@ -894,6 +894,7 @@ export class LyraEngine {
   private sustained = new Set<number>();
   private bend = 0;
   private cutoffMod = 0;
+  private outputVol = 1;
   private buses: {
     voice: GainNode;
     chorusDelay: DelayNode;
@@ -1288,7 +1289,7 @@ export class LyraEngine {
     this.buses.revWet.gain.setTargetAtTime(fx.reverbMix, now, 0.04);
     this.buses.chorusGain.gain.setTargetAtTime(fx.chorusMix * 0.7, now, 0.04);
     this.buses.phaserGain.gain.setTargetAtTime((fx.phaserMix ?? 0) * 0.65, now, 0.04);
-    this.buses.master.gain.setTargetAtTime(this.muted ? 0 : clamp(this.patch.master, 0, 1), now, 0.03);
+    this.applyOutGain(now);
     this.lfos.lfo1.frequency.setTargetAtTime(clamp(this.patch.lfo.rate, 0.02, 30), now, 0.02);
     try {
       this.lfos.lfo1.type = oscLfoType(this.patch.lfo.wave);
@@ -1356,12 +1357,22 @@ export class LyraEngine {
 
   setMaster(v: number) {
     this.patch.master = v;
-    if (!this.muted) this.buses.master.gain.setTargetAtTime(clamp(v, 0, 1), this.ctx.currentTime, 0.02);
+    this.applyOutGain();
+  }
+
+  setOutputVol(v: number) {
+    this.outputVol = clamp(v, 0, 1);
+    this.applyOutGain();
+  }
+
+  private applyOutGain(now = this.ctx.currentTime) {
+    const g = this.muted ? 0 : clamp(this.patch.master, 0, 1) * clamp(this.outputVol, 0, 1);
+    this.buses.master.gain.setTargetAtTime(g, now, 0.03);
   }
 
   setMuted(on: boolean) {
     this.muted = on;
-    this.buses.master.gain.setTargetAtTime(on ? 0 : clamp(this.patch.master, 0, 1), this.ctx.currentTime, 0.03);
+    this.applyOutGain();
   }
 
   setStack(next: EngineStack) {

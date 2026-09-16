@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
-  Cable,
   CircleHelp,
   Download,
   Maximize2,
@@ -14,14 +13,12 @@ import {
   Trash2,
   Volume2,
   VolumeX,
-  Usb,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { clonePatch, groupByCategory } from "@/lib/synth/patches";
 import { bindAudioUnlock, bindComputerKeyboard, useSynth } from "@/lib/synth/store";
 import { tapTempo } from "@/lib/synth/tap-tempo";
 import { startStageKeepAlive } from "@/lib/synth/stage-lock";
-import { midiBadgeLabel } from "@/lib/synth/midi";
 import { isIosTouch } from "@/lib/synth/engine";
 import type {
   ArpMode,
@@ -40,7 +37,6 @@ import type {
   UniVoices,
 } from "@/lib/synth/types";
 import { Keyboard } from "./Keyboard";
-import { DawPanel } from "./DawPanel";
 import { HelpPanel } from "./HelpPanel";
 import { LayerStrip } from "./LayerStrip";
 import { SceneBar } from "./SceneBar";
@@ -138,8 +134,6 @@ export function SynthApp() {
   const deleteUserPatch = useSynth((s) => s.deleteUserPatch);
   const favorites = useSynth((s) => s.favorites);
   const toggleFavorite = useSynth((s) => s.toggleFavorite);
-  const midiStatus = useSynth((s) => s.midiStatus);
-  const midiName = useSynth((s) => s.midiName);
   const voices = useSynth((s) => s.voices);
   const octave = useSynth((s) => s.octave);
   const transpose = useSynth((s) => s.transpose);
@@ -150,8 +144,6 @@ export function SynthApp() {
   const toggleMute = useSynth((s) => s.toggleMute);
   const showKeys = useSynth((s) => s.showKeys);
   const toggleKeys = useSynth((s) => s.toggleKeys);
-  const dawOpen = useSynth((s) => s.dawOpen);
-  const setDawOpen = useSynth((s) => s.setDawOpen);
   const helpOpen = useSynth((s) => s.helpOpen);
   const setHelpOpen = useSynth((s) => s.setHelpOpen);
   const stageLock = useSynth((s) => s.stageLock);
@@ -160,8 +152,6 @@ export function SynthApp() {
   const toggleBounce = useSynth((s) => s.toggleBounce);
   const midiLearn = useSynth((s) => s.midiLearn);
   const setMidiLearn = useSynth((s) => s.setMidiLearn);
-  const clockFollow = useSynth((s) => s.clockFollow);
-  const clockRunning = useSynth((s) => s.clockRunning);
   const engine = useSynth((s) => s.engine);
   const arpStep = useSynth((s) => s.arpStep);
   const cutoffMod = useSynth((s) => s.cutoffMod);
@@ -253,8 +243,8 @@ export function SynthApp() {
       >
         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
           <div className="flex min-w-0 items-center gap-3">
-            <div className="lyra-brand min-w-0">
-              <MidiBadge status={midiStatus} name={midiName} />
+            <div className={cn("lyra-brand", pad ? "min-w-0" : "shrink-0")}>
+              <HeaderVol compact={pad} />
             </div>
             <div className="ml-auto flex items-center gap-2">
               <div className="flex items-center" title="Transpose all incoming notes (MIDI, keys, piano)">
@@ -273,23 +263,7 @@ export function SynthApp() {
                   +
                 </button>
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  useSynth.getState().arm();
-                  setDawOpen(true);
-                }}
-                className={cn(
-                  "h-10 shrink-0 rounded-md px-3 text-base font-semibold",
-                  dawOpen || (clockFollow && clockRunning) ? "bg-accent text-accent-fg" : "bg-elevated text-muted hover:text-fg",
-                )}
-                title="DAW / IAC setup"
-              >
-                <span className="inline-flex items-center gap-1.5">
-                  <Cable className="size-4" />
-                  DAW
-                </span>
-              </button>
+              {pad ? null : (
               <button
                 type="button"
                 onClick={() => setMidiLearn(!midiLearn)}
@@ -302,6 +276,7 @@ export function SynthApp() {
               >
                 Learn
               </button>
+              )}
               <div
                 className={cn(
                   pad ? "hidden" : "hidden h-10 w-14 shrink-0 items-center justify-center rounded-md text-sm font-semibold md:flex",
@@ -313,7 +288,17 @@ export function SynthApp() {
             </div>
           </div>
 
-          <div className={cn("flex items-center justify-center gap-1.5", pad ? "w-[9.5rem]" : "w-80 sm:w-[28rem]")}>
+          <div className={cn("flex items-center justify-center gap-1.5", pad ? "w-[12.5rem]" : "w-80 sm:w-[28rem]")}>
+            {pad ? (
+              <div
+                className={cn(
+                  "flex h-10 w-10 shrink-0 items-center justify-center text-sm font-semibold",
+                  live ? "text-accent" : "text-muted",
+                )}
+              >
+                {live ? "Live" : "Idle"}
+              </div>
+            ) : null}
             <div className="min-w-0 flex-1">
               <Scope compact />
             </div>
@@ -405,6 +390,20 @@ export function SynthApp() {
               <Maximize2 className="size-4" />
             </button>
             )}
+            {pad ? (
+                <button
+                  type="button"
+                  onClick={() => setStageLock(!stageLock)}
+                  className={cn(
+                    "h-10 shrink-0 rounded-md px-3 text-base font-semibold",
+                    stageLock ? "bg-accent text-accent-fg" : "bg-elevated text-muted hover:text-fg",
+                  )}
+                  title="Keep this tab awake for a set. Off at home — uses a bit more battery and RAM."
+                  aria-pressed={stageLock}
+                >
+                  Stage
+                </button>
+            ) : null}
             {!pad ? (
               <>
                 <button
@@ -439,18 +438,31 @@ export function SynthApp() {
                   onClick={() => setPadMenu((v) => !v)}
                   className={cn(
                     "grid size-10 place-items-center rounded-md",
-                    padMenu || stageLock || bounceOn || helpOpen
+                    padMenu || bounceOn || helpOpen || midiLearn
                       ? "bg-accent text-accent-fg"
                       : "bg-elevated text-muted hover:text-fg",
                   )}
                   aria-label="More"
-                  title="Wav, Stage, Help"
+                  title="Learn, Wav, Help"
                   aria-expanded={padMenu}
                 >
                   <MoreHorizontal className="size-4" />
                 </button>
                 {padMenu ? (
                   <div className="absolute right-0 top-full z-30 mt-1 flex min-w-36 flex-col gap-1 rounded-lg border border-border bg-bg p-1 shadow-lg">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMidiLearn(!midiLearn);
+                        setPadMenu(false);
+                      }}
+                      className={cn(
+                        "h-11 rounded-md px-3 text-left text-base font-semibold",
+                        midiLearn ? "bg-accent text-accent-fg" : "bg-elevated text-fg",
+                      )}
+                    >
+                      Learn {midiLearn ? "on" : "off"}
+                    </button>
                     <button
                       type="button"
                       onClick={() => {
@@ -463,19 +475,6 @@ export function SynthApp() {
                       )}
                     >
                       {bounceOn ? "Stop wav" : "Wav"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setStageLock(!stageLock);
-                        setPadMenu(false);
-                      }}
-                      className={cn(
-                        "h-11 rounded-md px-3 text-left text-base font-semibold",
-                        stageLock ? "bg-accent text-accent-fg" : "bg-elevated text-fg",
-                      )}
-                    >
-                      Stage {stageLock ? "on" : "off"}
                     </button>
                     <button
                       type="button"
@@ -637,7 +636,6 @@ export function SynthApp() {
               <Knob label="Sync" value={p.sync} arm armOn={0.35} format={fmtPct} onChange={(sync) => update(clonePatch(p, { sync }))} />
               <Knob label="Drift" value={p.drift} arm armOn={0.2} format={fmtPct} onChange={(drift) => update(clonePatch(p, { drift }))} />
               <Knob label="Glide" value={p.glide} arm armOn={0.18} format={fmtPct} onChange={(glide) => update(clonePatch(p, { glide }))} />
-              <Knob label="Out" learnId="master" value={p.master} format={fmtPct} onChange={(master) => update(clonePatch(p, { master }))} />
             </div>
           </Cell>
 
@@ -943,7 +941,7 @@ export function SynthApp() {
         <GrooveBar />
         <PatternBar patch={p} playhead={arpStep} onChange={update} />
 
-        <section className="lyra-lib mt-3 rounded-xl bg-surface p-4">
+        <section className="lyra-lib mt-3 rounded-xl bg-surface">
           <h2 className="lyra-cell-title">Library · {factory.length} factory</h2>
           <div className="flex flex-wrap gap-1">
             <button
@@ -1157,7 +1155,6 @@ export function SynthApp() {
           </div>
         </div>
       )}
-      <DawPanel />
       <HelpPanel />
     </div>
   );
@@ -1222,31 +1219,36 @@ function BpmReadout({ tempo }: { tempo: number }) {
   );
 }
 
-function MidiBadge({ status, name }: { status: string; name: string | null }) {
-  const raw = name?.trim() || "MIDI";
-  const parts = raw.split(/\s*[·|,;/]\s*/).map((s) => s.trim()).filter(Boolean);
-  const label =
-    status === "ok"
-      ? midiBadgeLabel(parts.length ? parts : [raw])
-      : status === "unsupported"
-        ? "No MIDI"
-        : status === "denied"
-          ? "Blocked"
-          : status === "none"
-            ? "No kb"
-            : "MIDI";
+function HeaderVol({ compact = false }: { compact?: boolean }) {
+  const v = useSynth((s) => s.outputVol);
+  const set = useSynth((s) => s.setOutputVol);
+  const [drag, setDrag] = useState<number | null>(null);
+  const shown = drag ?? v;
+  const apply = (n: number) => {
+    const x = Math.max(0, Math.min(1, n));
+    setDrag(x);
+    set(x);
+  };
   return (
     <div
-      className={cn(
-        "lyra-midi-name flex min-w-0 max-w-[min(42vw,26rem)] items-center gap-1.5 font-semibold",
-        isIosTouch() && "max-w-[9.5rem]",
-        status === "ok" ? "text-accent" : "text-muted",
-      )}
-      title={label}
+      className={cn("flex shrink-0 items-center gap-2", compact && "w-[14.4rem] min-w-0 gap-1.5")}
+      title="Master volume — not saved in the patch. CK volume / CC7 moves this. Double-click 85%."
     >
-      <Usb className="size-4 shrink-0" />
-      <span className="truncate">{label}</span>
-      <span className={cn("size-1.5 shrink-0 rounded-full", status === "ok" ? "bg-accent" : "bg-subtle")} />
+      <Volume2 className="size-4 shrink-0 text-muted" />
+      <input
+        type="range"
+        min={0}
+        max={1}
+        step={0.01}
+        value={shown}
+        aria-label="Master volume"
+        className={cn("h-10 min-w-0", compact ? "flex-1" : "w-[18rem] shrink-0")}
+        onInput={(e) => apply(Number((e.target as HTMLInputElement).value))}
+        onChange={(e) => apply(Number(e.target.value))}
+        onPointerUp={() => setDrag(null)}
+        onPointerCancel={() => setDrag(null)}
+        onDoubleClick={() => apply(0.85)}
+      />
     </div>
   );
 }
