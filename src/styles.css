@@ -332,9 +332,9 @@
   }
 
   .lyra-cell.lyra-shape {
-    height: 21rem;
-    min-height: 21rem;
-    max-height: 21rem;
+    height: 26.5rem;
+    min-height: 26.5rem;
+    max-height: 26.5rem;
     margin-top: 6px;
     overflow: hidden;
     border-radius: var(--radius-xl);
@@ -345,7 +345,7 @@
     display: grid;
     min-height: 0;
     flex: 1;
-    grid-template-columns: minmax(0, 1fr) 14.5rem;
+    grid-template-columns: minmax(0, 1fr) 15.5rem;
     gap: 14px;
   }
 
@@ -441,6 +441,63 @@
   }
 
   .lyra-shape-dests button.is-on {
+    background: var(--color-accent);
+    color: var(--color-accent-fg);
+  }
+
+  .lyra-shape-dests button.is-2:not(.is-on) {
+    box-shadow: inset 0 0 0 1.5px var(--color-accent);
+    color: var(--color-accent);
+  }
+
+  .lyra-knob.is-learnable {
+    cursor: crosshair;
+  }
+
+  .lyra-knob.is-learn {
+    box-shadow: 0 0 0 2px var(--color-accent);
+  }
+
+  .lyra-wt-stage.is-drop {
+    outline: 2px dashed var(--color-accent);
+    outline-offset: -2px;
+  }
+
+  .lyra-scenes {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 4px 8px 0;
+    padding: 4px 8px;
+    border-radius: var(--radius-xl);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-panel);
+  }
+
+  .lyra-scenes-label {
+    margin-right: 4px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--color-accent);
+  }
+
+  .lyra-scene {
+    width: 2.1rem;
+    height: 1.85rem;
+    border-radius: 6px;
+    background: var(--color-elevated);
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--color-muted);
+  }
+
+  .lyra-scene.is-filled {
+    color: var(--color-fg);
+  }
+
+  .lyra-scene.is-on {
     background: var(--color-accent);
     color: var(--color-accent-fg);
   }
@@ -1280,8 +1337,8 @@
   }
 
   .lyra-cell.lyra-shape {
-    height: 21rem;
-    max-height: 21rem;
+    height: 26.5rem;
+    max-height: 26.5rem;
     padding-bottom: 20px;
   }
 

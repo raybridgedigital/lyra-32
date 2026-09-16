@@ -7,6 +7,7 @@ export type DrawShape = {
   on: boolean;
   mode: ShapeMode;
   dest: ShapeDest;
+  dest2?: ShapeDest | "off";
   time: number;
   depth: number;
   from: number;
@@ -31,12 +32,23 @@ export function defaultDrawShape(): DrawShape {
     on: false,
     mode: "env",
     dest: "amp",
+    dest2: "off",
     time: 3,
     depth: 1,
     from: 0.15,
     preset: "silk",
     points: shapeBloom(),
   };
+}
+
+export function defaultDrawShape2(): DrawShape {
+  return { ...defaultDrawShape(), on: false, dest: "cutoff", dest2: "off", preset: "silk" };
+}
+
+export function shapeDests(sh: DrawShape): ShapeDest[] {
+  const out: ShapeDest[] = [sh.dest];
+  if (sh.dest2 && sh.dest2 !== "off" && sh.dest2 !== sh.dest) out.push(sh.dest2);
+  return out;
 }
 
 export function normalizeDrawShape(raw: Partial<DrawShape> | undefined): DrawShape {
@@ -52,6 +64,7 @@ export function normalizeDrawShape(raw: Partial<DrawShape> | undefined): DrawSha
     on: Boolean(raw.on),
     mode: raw.mode === "loop" ? "loop" : "env",
     dest: dest && okDest.includes(dest) ? dest : "amp",
+    dest2: raw.dest2 && (raw.dest2 === "off" || okDest.includes(raw.dest2)) ? raw.dest2 : "off",
     time: clamp(Number.isFinite(raw.time) ? (raw.time as number) : 3, 0.15, 12),
     depth: clamp(Number.isFinite(raw.depth) ? (raw.depth as number) : 1, 0, 1),
     from: clamp(Number.isFinite(raw.from) ? (raw.from as number) : d.from, 0, 1),

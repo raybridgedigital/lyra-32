@@ -98,6 +98,7 @@ export type Patch = {
   master: number;
   arp: ArpParams;
   drawShape?: DrawShape;
+  drawShape2?: DrawShape;
   groove?: Groove;
   stack?: PatchStack;
 };

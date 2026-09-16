@@ -16,6 +16,7 @@ import { cn } from "@/lib/cn";
 import { clonePatch, groupByCategory } from "@/lib/synth/patches";
 import { bindAudioUnlock, bindComputerKeyboard, useSynth } from "@/lib/synth/store";
 import { tapTempo } from "@/lib/synth/tap-tempo";
+import { startStageKeepAlive } from "@/lib/synth/stage-lock";
 import { midiBadgeLabel } from "@/lib/synth/midi";
 import type {
   ArpMode,
@@ -37,6 +38,7 @@ import { Keyboard } from "./Keyboard";
 import { DawPanel } from "./DawPanel";
 import { HelpPanel } from "./HelpPanel";
 import { LayerStrip } from "./LayerStrip";
+import { SceneBar } from "./SceneBar";
 import { PatternBar } from "./PatternBar";
 import { GrooveBar } from "./GrooveBar";
 import { AmtFader, Knob, LfoSlider, Seg } from "./Knob";
@@ -144,6 +146,10 @@ export function SynthApp() {
   const setDawOpen = useSynth((s) => s.setDawOpen);
   const helpOpen = useSynth((s) => s.helpOpen);
   const setHelpOpen = useSynth((s) => s.setHelpOpen);
+  const stageLock = useSynth((s) => s.stageLock);
+  const setStageLock = useSynth((s) => s.setStageLock);
+  const midiLearn = useSynth((s) => s.midiLearn);
+  const setMidiLearn = useSynth((s) => s.setMidiLearn);
   const clockFollow = useSynth((s) => s.clockFollow);
   const clockRunning = useSynth((s) => s.clockRunning);
   const engine = useSynth((s) => s.engine);
@@ -167,6 +173,13 @@ export function SynthApp() {
       unlock();
     };
   }, []);
+
+  useEffect(() => {
+    if (!stageLock) return;
+    useSynth.getState().arm();
+    const ctx = useSynth.getState().engine?.audioContext ?? null;
+    return startStageKeepAlive(ctx);
+  }, [stageLock, engine]);
 
   const allPatches = useMemo(() => [...factory, ...userPatches], [factory, userPatches]);
   const factoryGroups = useMemo(() => groupByCategory(factory), [factory]);
@@ -225,6 +238,35 @@ export function SynthApp() {
                   +
                 </button>
               </div>
+              <button
+                type="button"
+                onClick={() => {
+                  useSynth.getState().arm();
+                  setDawOpen(true);
+                }}
+                className={cn(
+                  "h-10 shrink-0 rounded-md px-3 text-base font-semibold",
+                  dawOpen || (clockFollow && clockRunning) ? "bg-accent text-accent-fg" : "bg-elevated text-muted hover:text-fg",
+                )}
+                title="DAW / IAC setup"
+              >
+                <span className="inline-flex items-center gap-1.5">
+                  <Cable className="size-4" />
+                  DAW
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setMidiLearn(!midiLearn)}
+                className={cn(
+                  "h-10 shrink-0 rounded-md px-3 text-base font-semibold",
+                  midiLearn ? "bg-accent text-accent-fg" : "bg-elevated text-muted hover:text-fg",
+                )}
+                title="MIDI Learn — gold, then click a knob, then move a CK88 control"
+                aria-pressed={midiLearn}
+              >
+                Learn
+              </button>
               <div
                 className={cn(
                   "hidden h-10 w-14 shrink-0 items-center justify-center rounded-md text-sm font-semibold md:flex",
@@ -236,8 +278,15 @@ export function SynthApp() {
             </div>
           </div>
 
-          <div className="flex w-72 items-center justify-center sm:w-96">
+          <div className="flex w-80 items-center justify-center gap-2 sm:w-[28rem]">
             <Scope compact />
+            <div
+              className="flex h-10 w-12 shrink-0 items-center justify-center gap-1 font-mono text-sm tabular-nums text-muted"
+              title="Voices sounding"
+            >
+              <Activity className="size-3.5 shrink-0" />
+              <span className="w-5 text-right">{voices}</span>
+            </div>
           </div>
 
           <div className="flex min-w-0 items-center gap-2">
@@ -252,12 +301,6 @@ export function SynthApp() {
               Tap
             </button>
             <BpmReadout tempo={p.arp.tempo} />
-            <div
-              className="flex h-10 w-12 shrink-0 items-center justify-center gap-1 font-mono text-sm tabular-nums text-muted"
-            >
-              <Activity className="size-3.5 shrink-0" />
-              <span className="w-5 text-right">{voices}</span>
-            </div>
             <div className="flex items-center" title="On-screen / computer keyboard octave">
               <button type="button" className="h-10 rounded-l-md bg-elevated px-2.5 text-base font-semibold" onClick={() => shiftOctave(-1)}>
                 −
@@ -280,7 +323,7 @@ export function SynthApp() {
               type="button"
               onClick={toggleMute}
               className={cn(
-                "grid size-10 place-items-center rounded-md",
+                "grid size-10 shrink-0 place-items-center rounded-md",
                 mute ? "bg-accent text-accent-fg" : "bg-elevated text-fg",
               )}
               aria-label={mute ? "Unmute" : "Mute"}
@@ -289,20 +332,15 @@ export function SynthApp() {
             </button>
             <button
               type="button"
-              onClick={() => {
-                useSynth.getState().arm();
-                setDawOpen(true);
-              }}
+              onClick={() => setStageLock(!stageLock)}
               className={cn(
-                "h-10 rounded-md px-3 text-base font-semibold",
-                dawOpen || (clockFollow && clockRunning) ? "bg-accent text-accent-fg" : "bg-elevated text-muted hover:text-fg",
+                "h-10 shrink-0 rounded-md px-3 text-base font-semibold",
+                stageLock ? "bg-accent text-accent-fg" : "bg-elevated text-muted hover:text-fg",
               )}
-              title="DAW / IAC setup"
+              title="Keep this tab awake for a set. Off at home — uses a bit more battery and RAM."
+              aria-pressed={stageLock}
             >
-              <span className="inline-flex items-center gap-1.5">
-                <Cable className="size-4" />
-                DAW
-              </span>
+              Stage
             </button>
             <button
               type="button"
@@ -319,7 +357,7 @@ export function SynthApp() {
             <button
               type="button"
               onClick={panic}
-              className="h-10 rounded-md bg-elevated px-3 text-base font-semibold text-muted hover:text-fg"
+              className="h-10 shrink-0 rounded-md bg-elevated px-3 text-base font-semibold text-muted hover:text-fg"
             >
               Panic
             </button>
@@ -329,6 +367,7 @@ export function SynthApp() {
       </header>
 
       <LayerStrip patches={allPatches} />
+      <SceneBar />
 
       <main className="flex w-full flex-col px-1 py-1 sm:px-2">
         <div className={cn("lyra-face", showKeys && "keys-on")}>
@@ -357,6 +396,7 @@ export function SynthApp() {
               />
               <Knob
                 label="Level"
+                learnId="osc1.level"
                 value={p.osc1.level}
                 defaultValue={0.8}
                 format={fmtPct}
@@ -397,6 +437,7 @@ export function SynthApp() {
               />
               <Knob
                 label="Level"
+                learnId="osc2.level"
                 value={p.osc2.level}
                 defaultValue={0.7}
                 arm
@@ -445,14 +486,14 @@ export function SynthApp() {
               </label>
             </div>
             <div className="lyra-knobs mt-3">
-              <Knob label="Sub" value={p.subLevel} arm armOn={0.4} format={fmtPct} onChange={(subLevel) => update(clonePatch(p, { subLevel }))} />
-              <Knob label="Noise" value={p.noiseLevel} arm armOn={0.22} format={fmtPct} onChange={(noiseLevel) => update(clonePatch(p, { noiseLevel }))} />
-              <Knob label="Drive" value={p.drive} arm armOn={0.28} format={fmtPct} onChange={(drive) => update(clonePatch(p, { drive }))} />
-              <Knob label="Ring" value={p.ring} arm armOn={0.4} format={fmtPct} onChange={(ring) => update(clonePatch(p, { ring }))} />
+              <Knob label="Sub" learnId="sub" value={p.subLevel} arm armOn={0.4} format={fmtPct} onChange={(subLevel) => update(clonePatch(p, { subLevel }))} />
+              <Knob label="Noise" learnId="noise" value={p.noiseLevel} arm armOn={0.22} format={fmtPct} onChange={(noiseLevel) => update(clonePatch(p, { noiseLevel }))} />
+              <Knob label="Drive" learnId="drive" value={p.drive} arm armOn={0.28} format={fmtPct} onChange={(drive) => update(clonePatch(p, { drive }))} />
+              <Knob label="Ring" learnId="ring" value={p.ring} arm armOn={0.4} format={fmtPct} onChange={(ring) => update(clonePatch(p, { ring }))} />
               <Knob label="Sync" value={p.sync} arm armOn={0.35} format={fmtPct} onChange={(sync) => update(clonePatch(p, { sync }))} />
               <Knob label="Drift" value={p.drift} arm armOn={0.2} format={fmtPct} onChange={(drift) => update(clonePatch(p, { drift }))} />
               <Knob label="Glide" value={p.glide} arm armOn={0.18} format={fmtPct} onChange={(glide) => update(clonePatch(p, { glide }))} />
-              <Knob label="Out" value={p.master} format={fmtPct} onChange={(master) => update(clonePatch(p, { master }))} />
+              <Knob label="Out" learnId="master" value={p.master} format={fmtPct} onChange={(master) => update(clonePatch(p, { master }))} />
             </div>
           </Cell>
 
@@ -489,6 +530,7 @@ export function SynthApp() {
               <div className="lyra-cut-cell">
                 <Knob
                   label="Cut"
+                  learnId="cut"
                   value={p.filter.cutoff}
                   liveValue={Math.min(1, Math.max(0, p.filter.cutoff + cutoffMod * 0.4))}
                   defaultValue={0.62}
@@ -510,6 +552,7 @@ export function SynthApp() {
               </div>
               <Knob
                 label="Res"
+                learnId="res"
                 value={p.filter.resonance}
                 format={fmtPct}
                 onChange={(resonance) => update(clonePatch(p, { filter: { ...p.filter, resonance } }))}
@@ -543,8 +586,15 @@ export function SynthApp() {
 
           <Cell title="Amp EG">
             <div className="lyra-knobs lyra-knobs-5">
-              <Knob label="A" value={p.ampEnv.attack} min={0.001} max={4} format={fmtMs} onChange={(attack) => update(clonePatch(p, { ampEnv: { ...p.ampEnv, attack } }))} />
-              <Knob label="D" value={p.ampEnv.decay} min={0.01} max={4} format={fmtMs} onChange={(decay) => update(clonePatch(p, { ampEnv: { ...p.ampEnv, decay } }))} />
+              <Knob
+                label="A"
+                learnId="atk"
+                value={p.ampEnv.attack}
+                min={0.001}
+                max={4}
+                format={fmtMs}
+                onChange={(attack) => update(clonePatch(p, { ampEnv: { ...p.ampEnv, attack } }))}
+              />
               <Knob label="S" value={p.ampEnv.sustain} format={fmtPct} onChange={(sustain) => update(clonePatch(p, { ampEnv: { ...p.ampEnv, sustain } }))} />
               <Knob label="R" value={p.ampEnv.release} min={0.01} max={8} format={fmtMs} onChange={(release) => update(clonePatch(p, { ampEnv: { ...p.ampEnv, release } }))} />
               <Knob label="Vel" value={p.velAmp ?? 0} arm armOn={0.4} format={fmtPct} onChange={(velAmp) => update(clonePatch(p, { velAmp }))} />
@@ -561,6 +611,7 @@ export function SynthApp() {
             <div className="lyra-knobs lyra-knobs-3">
               <Knob
                 label="Delay"
+                learnId="dly"
                 value={p.fx.delayMix}
                 arm
                 armOn={0.22}
@@ -583,6 +634,7 @@ export function SynthApp() {
               />
               <Knob
                 label="Rev"
+                learnId="rev"
                 value={p.fx.reverbMix}
                 arm
                 armOn={0.22}

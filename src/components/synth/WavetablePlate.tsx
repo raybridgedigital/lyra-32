@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/cn";
 import { clonePatch } from "@/lib/synth/patches";
 import { useSynth } from "@/lib/synth/store";
-import { WT_TABLES, getTable, shapeFromOsc, wtCycle } from "@/lib/synth/wavetable";
+import { WT_TABLES, getTable, setUserTable, shapeFromOsc, wtCycle } from "@/lib/synth/wavetable";
+import { audioToFrames, decodeWavPcm } from "@/lib/synth/wav-import";
 import type { OscParams, Patch, WtWarp } from "@/lib/synth/types";
 import { Knob, Seg } from "./Knob";
 
@@ -67,6 +68,8 @@ export function WavetablePlate({ patch, onChange }: { patch: Patch; onChange: (p
   const activeNotes = useSynth((s) => s.activeNotes);
   const [target, setTarget] = useState<Target>("osc1");
   const [zoom, setZoom] = useState<1 | 2 | 4>(1);
+  const [dropOn, setDropOn] = useState(false);
+  const [userTick, setUserTick] = useState(0);
   const tableCanvas = useRef<HTMLCanvasElement>(null);
   const liveCanvas = useRef<HTMLCanvasElement>(null);
   const stripRef = useRef<HTMLCanvasElement>(null);
@@ -76,12 +79,21 @@ export function WavetablePlate({ patch, onChange }: { patch: Patch; onChange: (p
   const tableId = osc.table ?? "classic";
   const pos = osc.pwm;
   const shape = useMemo(() => shapeFromOsc(osc), [osc]);
-  const table = useMemo(() => getTable(tableId), [tableId]);
-  const cycle = useMemo(() => wtCycle(tableId, pos, shape), [tableId, pos, shape]);
+  const table = useMemo(() => getTable(tableId), [tableId, userTick]);
+  const cycle = useMemo(() => wtCycle(tableId, pos, shape), [tableId, pos, shape, userTick]);
 
   const applyOsc = (fn: (o: OscParams) => OscParams) => {
     if (target === "both") onChange(clonePatch(patch, { osc1: fn(patch.osc1), osc2: fn(patch.osc2) }));
     else onChange(clonePatch(patch, { [target]: fn(patch[target]) }));
+  };
+
+  const takeWav = async (file: File) => {
+    const buf = await file.arrayBuffer();
+    const pcm = decodeWavPcm(buf);
+    if (!pcm) return;
+    setUserTable(audioToFrames(pcm));
+    setUserTick((n) => n + 1);
+    applyOsc((o) => ({ ...o, wave: "wt", table: "user" }));
   };
 
   useEffect(() => {
@@ -110,7 +122,7 @@ export function WavetablePlate({ patch, onChange }: { patch: Patch; onChange: (p
       pathFromCycle(ctx, cyc, 4, y + 2, cssW * 0.58, rowH - 4);
       ctx.stroke();
     });
-  }, [tableId, pos]);
+  }, [tableId, pos, userTick]);
 
   useEffect(() => {
     const canvas = tableCanvas.current;
@@ -295,9 +307,22 @@ export function WavetablePlate({ patch, onChange }: { patch: Patch; onChange: (p
           ))}
           <canvas ref={stripRef} className="lyra-wt-strip" aria-hidden />
         </div>
-        <div className="lyra-wt-stage">
+        <div
+          className={cn("lyra-wt-stage", dropOn && "is-drop")}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDropOn(true);
+          }}
+          onDragLeave={() => setDropOn(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDropOn(false);
+            const f = e.dataTransfer.files[0];
+            if (f) void takeWav(f);
+          }}
+        >
           <div className="lyra-wt-pane">
-            <div className="lyra-wt-pane-h">Table · {table.name}</div>
+            <div className="lyra-wt-pane-h">Table · {table.name} · drop wav</div>
             <canvas ref={tableCanvas} className="lyra-wt-canvas" aria-hidden />
           </div>
           <div className="lyra-wt-pane">
@@ -344,6 +369,7 @@ export function WavetablePlate({ patch, onChange }: { patch: Patch; onChange: (p
           <div className="lyra-wt-knobs">
             <Knob
               label="Pos"
+              learnId="osc1.pwm"
               value={pos}
               defaultValue={0.5}
               format={(v) => `${Math.round(v * 100)}`}

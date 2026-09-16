@@ -1,10 +1,20 @@
-# LYRA-32 Mk V
+# LYRA-32 Mk V.1
 
 Hybrid polyphonic web synthesizer by [Raybridge Digital](https://github.com/raybridgedigital).
 
 Play from a class-compliant USB-C MIDI keyboard, the computer keys (A–L), or the on-screen piano. Chrome / Edge / Firefox.
 
-This tag is the restore point **with** the Shape plate (drawn LFO / envelope) and the 12-table wavetable.
+This tag is the restore point **with** scenes, MIDI learn, Shape 2, wav drop, and Stage keep-awake.
+
+## Mk V.1 (v5.1)
+
+- 8 scene pads (store / recall sound + groove). Keys 1–8, Shift stores, Alt clears
+- MIDI Learn: map CK88 CCs to knobs (saved in the browser)
+- Stage: keep the tab awake (off by default)
+- Shape 2 + Shift-click second dest on the same curve
+- Drop a `.wav` on the wavetable → User table
+- Header: DAW / Learn on the left, voice count next to the scope, Panic stays visible
+- Restore: `git checkout v5.1.0`
 
 ## Mk V (v5.0)
 

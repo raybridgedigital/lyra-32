@@ -198,6 +198,19 @@ export const WT_TABLES: WtTable[] = [
 
 const tableMap = new Map(WT_TABLES.map((t) => [t.id, t]));
 
+export function setUserTable(frames: Float32Array[]) {
+  const table: WtTable = { id: "user", name: "User", frames };
+  tableMap.set("user", table);
+  const i = WT_TABLES.findIndex((t) => t.id === "user");
+  if (i >= 0) WT_TABLES[i] = table;
+  else WT_TABLES.unshift(table);
+  return table;
+}
+
+export function listTables() {
+  return WT_TABLES;
+}
+
 export function getTable(id: string | undefined) {
   return tableMap.get(id ?? "") ?? WT_TABLES[0]!;
 }

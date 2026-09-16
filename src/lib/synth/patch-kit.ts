@@ -1,7 +1,7 @@
 import type { LfoParams, ModRoute, OscParams, Patch, UniVoices } from "./types";
 import { defaultArpSteps, normalizeArpSteps } from "./arp";
 import { defaultGroove, normalizeGroove } from "./groove";
-import { defaultDrawShape, normalizeDrawShape } from "./draw-shape";
+import { defaultDrawShape, defaultDrawShape2, normalizeDrawShape } from "./draw-shape";
 import { isWtId } from "./wavetable";
 
 export const osc = (over: Partial<OscParams> = {}): OscParams => ({
@@ -97,6 +97,7 @@ export function patch(partial: PatchIn): Patch {
     },
     groove: defaultGroove(),
     drawShape: defaultDrawShape(),
+    drawShape2: defaultDrawShape2(),
     ...rest,
     osc1: osc(o1),
     osc2: osc({
@@ -170,6 +171,7 @@ export function normalizePatch(p: Patch): Patch {
     },
     groove: normalizeGroove(p.groove),
     drawShape: normalizeDrawShape(p.drawShape),
+    drawShape2: normalizeDrawShape(p.drawShape2 ?? defaultDrawShape2()),
     stack: normalizeStackField(p.stack),
   };
 }
@@ -210,6 +212,7 @@ export function clonePatch(p: Patch, over: Partial<Patch> = {}): Patch {
     },
     groove: normalizeGroove(over.groove ?? p.groove),
     drawShape: normalizeDrawShape(over.drawShape ?? p.drawShape),
+    drawShape2: normalizeDrawShape(over.drawShape2 ?? p.drawShape2),
     matrix: over.matrix ?? p.matrix,
     ring: over.ring ?? p.ring,
     sync: over.sync ?? p.sync,

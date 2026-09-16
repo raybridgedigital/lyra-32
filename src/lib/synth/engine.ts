@@ -6,7 +6,7 @@ import { layersForNote, type EngineLayer, type EngineStack } from "./stack";
 import { DRUM_PARTS, defaultGroove, stepsOf, type DrumPart } from "./groove";
 import { DrumVoice } from "./drums";
 import { wtPeriodic, shapeFromOsc, type WtShape } from "./wavetable";
-import { sampleShape, type DrawShape } from "./draw-shape";
+import { sampleShape, shapeDests, type DrawShape } from "./draw-shape";
 
 const MAX_VOICES = 32;
 const SUPERSAW_DETUNE = [-11, -7, -3, 0, 3, 7, 11];
@@ -216,10 +216,12 @@ class Voice {
     this.expr.gain.setValueAtTime(1, now);
     this.shapeAmp = ctx.createGain();
     const sh0 = patch.drawShape;
+    const shB = patch.drawShape2;
     const y0 = sh0?.on ? sampleShape(sh0.points, 0, sh0.from ?? 0) : 1;
-    const amp0 =
-      sh0?.on && sh0.dest === "amp" ? Math.max(0.0001, 1 - sh0.depth + sh0.depth * y0) : 1;
-    this.shapeAmp.gain.setValueAtTime(amp0, now);
+    const yB = shB?.on ? sampleShape(shB.points, 0, shB.from ?? 0) : 1;
+    const ampOf = (sh: DrawShape | undefined, y: number) =>
+      sh?.on && shapeDests(sh).includes("amp") ? Math.max(0.0001, 1 - sh.depth + sh.depth * y) : 1;
+    this.shapeAmp.gain.setValueAtTime(ampOf(sh0, y0) * ampOf(shB, yB), now);
     this.basePan = clamp(layer?.pan ?? 0, -1, 1);
 
     const shaper = ctx.createWaveShaper();
@@ -444,7 +446,15 @@ class Voice {
     this.vca.gain.linearRampToValueAtTime(peak, now + a);
     this.vca.gain.setTargetAtTime(s, now + a, d / 3);
 
-    if (sh0?.on && sh0.depth > 0.008) this.applyShape(sh0, y0, now);
+    if ((sh0?.on && sh0.depth > 0.008) || (shB?.on && shB.depth > 0.008)) {
+      this.applyShapes(
+        [
+          ...(sh0?.on ? [{ sh: sh0, y: y0 }] : []),
+          ...(shB?.on ? [{ sh: shB, y: yB }] : []),
+        ],
+        now,
+      );
+    }
   }
 
   private routeLfo(lfo: AudioNode, spec: { dest: ModDest; depth: number; fade?: number; wave?: LfoWave }, scale: number, sh?: ConstantSourceNode) {
@@ -708,17 +718,37 @@ class Voice {
   }
 
   applyShape(sh: DrawShape, y: number, now: number) {
+    this.applyShapes([{ sh, y }], now);
+  }
+
+  applyShapes(jobs: { sh: DrawShape; y: number }[], now: number) {
     if (this.dead) return;
-    const depth = clamp(sh.depth, 0, 1);
-    const dest = sh.dest;
-    const amp = dest === "amp" ? Math.max(0.0001, 1 - depth + depth * y) : 1;
+    let amp = 1;
+    let pch = 0;
+    let cut = 0;
+    let panAdd = 0;
+    let pwm: number | null = null;
+    let drive: number | null = null;
+    let fm: number | null = null;
+    for (const { sh, y } of jobs) {
+      if (!sh.on || sh.depth < 0.008) continue;
+      const depth = clamp(sh.depth, 0, 1);
+      for (const dest of shapeDests(sh)) {
+        if (dest === "amp") amp *= Math.max(0.0001, 1 - depth + depth * y);
+        if (dest === "pitch") pch += (y - 0.5) * 2 * depth * 520;
+        if (dest === "cutoff") cut += (y - 0.5) * 2 * depth * 2600;
+        if (dest === "pan") panAdd += (y - 0.5) * 2 * depth;
+        if (dest === "pwm") pwm = clamp(this.patchSnap.osc1.pwm + (y - 0.5) * depth, 0.05, 0.95);
+        if (dest === "drive") drive = 1 + (y - 0.5) * 2 * depth * 0.95;
+        if (dest === "fm") fm = y;
+      }
+    }
     try {
       this.shapeAmp.gain.setTargetAtTime(amp, now, 0.018);
     } catch {
       /* */
     }
     if (this.shapePitch) {
-      const pch = dest === "pitch" ? (y - 0.5) * 2 * depth * 520 : 0;
       try {
         this.shapePitch.offset.setTargetAtTime(pch, now, 0.02);
       } catch {
@@ -726,40 +756,39 @@ class Voice {
       }
     }
     if (this.shapeCut) {
-      const cut = dest === "cutoff" ? (y - 0.5) * 2 * depth * 2600 : 0;
       try {
         this.shapeCut.offset.setTargetAtTime(cut, now, 0.02);
       } catch {
         /* */
       }
     }
-    if (dest === "pan") {
+    if (Math.abs(panAdd) > 0.001) {
       try {
-        this.pan.pan.setTargetAtTime(clamp(this.basePan + (y - 0.5) * 2 * depth, -1, 1), now, 0.03);
+        this.pan.pan.setTargetAtTime(clamp(this.basePan + panAdd, -1, 1), now, 0.03);
       } catch {
         /* */
       }
     }
-    if (dest === "pwm") {
-      const pwm = clamp(this.patchSnap.osc1.pwm + (y - 0.5) * depth, 0.05, 0.95);
+    if (pwm != null) {
       const q = Math.round(pwm * 48);
       if (q !== this.lastShapePwm) {
         this.lastShapePwm = q;
         this.setWaveShape("osc1", { ...this.patchSnap.osc1, pwm });
       }
     }
-    if (dest === "drive" && this.driveIn) {
+    if (drive != null && this.driveIn) {
       try {
-        this.driveIn.gain.setTargetAtTime(1 + (y - 0.5) * 2 * depth * 0.95, now, 0.03);
+        this.driveIn.gain.setTargetAtTime(drive, now, 0.03);
       } catch {
         /* */
       }
     }
-    if (dest === "fm" && this.fmGain) {
+    if (fm != null && this.fmGain) {
       const freq0 = midiToFreq(this.midi, this.bend);
+      const depth = jobs.find((j) => shapeDests(j.sh).includes("fm"))?.sh.depth ?? 1;
       try {
         this.fmGain.gain.setTargetAtTime(
-          Math.max(0, this.patchSnap.fmIndex * freq0 * 4 * (0.15 + y * depth * 1.7)),
+          Math.max(0, this.patchSnap.fmIndex * freq0 * 4 * (0.15 + fm * depth * 1.7)),
           now,
           0.03,
         );
@@ -890,6 +919,8 @@ export class LyraEngine {
   private shLast = 0;
   private shapeClock = 0;
   shapePhase = 0;
+  private shapeClock2 = 0;
+  shapePhase2 = 0;
   private seqVoices: Voice[] = [];
   private seqByTrack: Voice[][] = [[], [], [], []];
   private clipTimers: number[] = [];
@@ -1058,6 +1089,10 @@ export class LyraEngine {
     return this.ctx.state === "running";
   }
 
+  get audioContext() {
+    return this.ctx;
+  }
+
   private startShClock() {
     if (this.shTimer != null) return;
     this.shLast = performance.now();
@@ -1096,29 +1131,57 @@ export class LyraEngine {
   }
 
   private tickShape(dt: number, now: number) {
-    const sh = this.patch.drawShape;
-    if (!sh?.on || sh.depth < 0.008) {
-      this.shapePhase = 0;
-      const rest: DrawShape = { on: false, mode: "env", dest: "amp", time: 1, depth: 0, from: 0, points: [1] };
-      for (const v of this.voices) if (v.alive) v.applyShape(rest, 1, now);
-      return;
-    }
-    const dur = Math.max(0.15, sh.time);
     const live = this.voices.filter((v) => v.alive);
-    if (sh.mode === "loop") {
-      this.shapeClock = (this.shapeClock + dt / dur) % 1;
-      this.shapePhase = this.shapeClock;
-      const y = sampleShape(sh.points, this.shapePhase, sh.from ?? 0);
-      for (const v of live) v.applyShape(sh, y, now);
+    const jobs: { sh: DrawShape; y: number }[] = [];
+    const run = (sh: DrawShape | undefined, clock: "1" | "2") => {
+      if (!sh?.on || sh.depth < 0.008) {
+        if (clock === "1") this.shapePhase = 0;
+        else this.shapePhase2 = 0;
+        return;
+      }
+      const dur = Math.max(0.15, sh.time);
+      if (sh.mode === "loop") {
+        if (clock === "1") {
+          this.shapeClock = (this.shapeClock + dt / dur) % 1;
+          this.shapePhase = this.shapeClock;
+        } else {
+          this.shapeClock2 = (this.shapeClock2 + dt / dur) % 1;
+          this.shapePhase2 = this.shapeClock2;
+        }
+        const y = sampleShape(sh.points, clock === "1" ? this.shapePhase : this.shapePhase2, sh.from ?? 0);
+        jobs.push({ sh, y });
+        return;
+      }
+      let lead = 0;
+      for (const v of live) {
+        const t = Math.min(1, Math.max(0, (now - v.startedAt) / dur));
+        lead = Math.max(lead, t);
+      }
+      if (clock === "1") this.shapePhase = live.length ? lead : 0;
+      else this.shapePhase2 = live.length ? lead : 0;
+      for (const v of live) {
+        /* env is per-voice — applied below */
+      }
+      jobs.push({ sh, y: 0, env: true } as { sh: DrawShape; y: number });
+    };
+    run(this.patch.drawShape, "1");
+    run(this.patch.drawShape2, "2");
+    if (!jobs.length) {
+      const rest: DrawShape = { on: false, mode: "env", dest: "amp", dest2: "off", time: 1, depth: 0, from: 0, points: [1] };
+      for (const v of this.voices) if (v.alive) v.applyShapes([{ sh: rest, y: 1 }], now);
       return;
     }
-    let lead = 0;
     for (const v of live) {
-      const t = Math.min(1, Math.max(0, (now - v.startedAt) / dur));
-      lead = Math.max(lead, t);
-      v.applyShape(sh, sampleShape(sh.points, t, sh.from ?? 0), now);
+      const per = jobs.map(({ sh }) => {
+        if (sh.mode === "loop") {
+          const phase = sh === this.patch.drawShape2 ? this.shapePhase2 : this.shapePhase;
+          return { sh, y: sampleShape(sh.points, phase, sh.from ?? 0) };
+        }
+        const t = Math.min(1, Math.max(0, (now - v.startedAt) / Math.max(0.15, sh.time)));
+        return { sh, y: sampleShape(sh.points, t, sh.from ?? 0) };
+      });
+      v.applyShapes(per, now);
     }
-    this.shapePhase = live.length ? lead : 0;
   }
 
   applyPatch(p: Patch) {

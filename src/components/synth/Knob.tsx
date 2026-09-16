@@ -1,5 +1,6 @@
 import { useRef } from "react";
 import { cn } from "@/lib/cn";
+import { useSynth } from "@/lib/synth/store";
 
 type Props = {
   label: string;
@@ -16,6 +17,7 @@ type Props = {
   liveValue?: number;
   armOff?: number;
   armOn?: number;
+  learnId?: string;
 };
 
 const CX = 24;
@@ -54,8 +56,12 @@ export function Knob({
   armOff,
   armOn,
   liveValue,
+  learnId,
 }: Props) {
   const start = useRef<{ y: number; v: number } | null>(null);
+  const midiLearn = useSynth((s) => s.midiLearn);
+  const midiLearnId = useSynth((s) => s.midiLearnId);
+  const waiting = Boolean(learnId && midiLearn && midiLearnId === learnId);
   const safe = Number.isFinite(value) ? value : min;
   const span = max - min;
   const t = span === 0 ? 0 : clamp((safe - min) / span, 0, 1);
@@ -69,6 +75,11 @@ export function Knob({
   const armed = useArm(safe, onChange, off, armOn ?? (defaultValue != null && defaultValue !== off ? defaultValue : min + span * 0.35));
 
   const onPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (learnId && useSynth.getState().midiLearn) {
+      e.preventDefault();
+      useSynth.getState().armLearn(learnId);
+      return;
+    }
     e.preventDefault();
     try {
       e.currentTarget.setPointerCapture(e.pointerId);
@@ -98,6 +109,8 @@ export function Knob({
         className={cn(
           "lyra-knob relative touch-none rounded-full bg-elevated shadow-knob outline-none",
           "focus-visible:ring-2 focus-visible:ring-accent/70",
+          waiting && "is-learn",
+          midiLearn && learnId && "is-learnable",
         )}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}

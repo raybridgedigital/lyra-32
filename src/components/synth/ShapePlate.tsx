@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/cn";
 import { clonePatch } from "@/lib/synth/patches";
 import { useSynth } from "@/lib/synth/store";
@@ -27,14 +27,16 @@ export function ShapePlate({ patch, onChange }: { patch: Patch; onChange: (p: Pa
   const engine = useSynth((s) => s.engine);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const drawing = useRef(false);
-  const sh = normalizeDrawShape(patch.drawShape);
+  const [slot, setSlot] = useState<1 | 2>(1);
+  const sh = normalizeDrawShape(slot === 2 ? patch.drawShape2 : patch.drawShape);
   const pointsRef = useRef(sh.points);
   const fromRef = useRef(sh.from);
   pointsRef.current = sh.points;
   fromRef.current = sh.from;
 
   const setShape = (over: Partial<typeof sh>) => {
-    onChange(clonePatch(patch, { drawShape: { ...sh, ...over } }));
+    const next = { ...sh, ...over };
+    onChange(clonePatch(patch, slot === 2 ? { drawShape2: next } : { drawShape: next }));
   };
 
   const paint = (ev: React.PointerEvent<HTMLCanvasElement>) => {
@@ -62,16 +64,16 @@ export function ShapePlate({ patch, onChange }: { patch: Patch; onChange: (p: Pa
     const canvas = canvasRef.current;
     if (!canvas) return;
     let raf = 0;
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
     const draw = () => {
-      const cssW = canvas.clientWidth || 640;
-      const cssH = canvas.clientHeight || 200;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      const cssW = canvas.clientWidth;
+      const cssH = canvas.clientHeight;
       if (canvas.width !== Math.floor(cssW * dpr) || canvas.height !== Math.floor(cssH * dpr)) {
         canvas.width = Math.floor(cssW * dpr);
         canvas.height = Math.floor(cssH * dpr);
       }
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.fillStyle = "#0c0f14";
       ctx.fillRect(0, 0, cssW, cssH);
@@ -113,7 +115,7 @@ export function ShapePlate({ patch, onChange }: { patch: Patch; onChange: (p: Pa
       ctx.lineJoin = "round";
       ctx.lineCap = "round";
       ctx.stroke();
-      const phase = engine?.shapePhase ?? 0;
+      const phase = slot === 2 ? (engine?.shapePhase2 ?? 0) : (engine?.shapePhase ?? 0);
       if (sh.on && (engine?.voiceCount ?? 0) + (sh.mode === "loop" ? 1 : 0) > 0) {
         const px = padX + phase * w;
         ctx.strokeStyle = "rgb(201 137 58 / 0.85)";
@@ -127,7 +129,7 @@ export function ShapePlate({ patch, onChange }: { patch: Patch; onChange: (p: Pa
     };
     raf = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(raf);
-  }, [engine, sh.on, sh.mode, sh.from]);
+  }, [engine, sh.on, sh.mode, sh.from, slot]);
 
   return (
     <section className="lyra-cell lyra-shape">
@@ -178,6 +180,17 @@ export function ShapePlate({ patch, onChange }: { patch: Patch; onChange: (p: Pa
           </div>
         </div>
         <div className="lyra-shape-side">
+          <Seg
+            compact
+            value={slot === 2 ? "2" : "1"}
+            options={
+              [
+                { id: "1", label: "Sh 1", title: "Shape 1" },
+                { id: "2", label: "Sh 2", title: "Shape 2 — independent curve" },
+              ] as { id: "1" | "2"; label: string; title: string }[]
+            }
+            onChange={(id) => setSlot(id === "2" ? 2 : 1)}
+          />
           <button type="button" className={cn("lyra-shape-arm", sh.on && "is-on")} onClick={() => setShape({ on: !sh.on })}>
             {sh.on ? "Armed" : "Arm shape"}
           </button>
@@ -197,9 +210,12 @@ export function ShapePlate({ patch, onChange }: { patch: Patch; onChange: (p: Pa
               <button
                 key={d.id}
                 type="button"
-                title={d.title}
-                className={cn(sh.dest === d.id && "is-on")}
-                onClick={() => setShape({ dest: d.id })}
+                title={`${d.title} — click dest, Shift-click second dest`}
+                className={cn(sh.dest === d.id && "is-on", sh.dest2 === d.id && "is-2")}
+                onClick={(e) => {
+                  if (e.shiftKey) setShape({ dest2: sh.dest2 === d.id ? "off" : d.id });
+                  else setShape({ dest: d.id });
+                }}
               >
                 {d.label}
               </button>
@@ -208,6 +224,7 @@ export function ShapePlate({ patch, onChange }: { patch: Patch; onChange: (p: Pa
           <div className="lyra-shape-knobs">
             <Knob
               label="Time"
+              learnId="shape.time"
               value={sh.time}
               min={0.2}
               max={8}
@@ -217,6 +234,7 @@ export function ShapePlate({ patch, onChange }: { patch: Patch; onChange: (p: Pa
             />
             <Knob
               label="From"
+              learnId="shape.from"
               value={sh.from}
               min={0}
               max={1}
@@ -226,6 +244,7 @@ export function ShapePlate({ patch, onChange }: { patch: Patch; onChange: (p: Pa
             />
             <Knob
               label="Depth"
+              learnId="shape.depth"
               value={sh.depth}
               defaultValue={1}
               format={(v) => `${Math.round(v * 100)}`}

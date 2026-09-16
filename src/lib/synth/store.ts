@@ -6,6 +6,8 @@ import { QWERTY_MAP, connectMidi, setMidiPortFilter, type MidiPortInfo } from ".
 import { defaultMix } from "./stack";
 import { DRUM_MIDI, clearDrumLane as wipeDrumLane, clearNoteTrack as wipeNoteTrack, grooveOf, newClipId, normalizeGroove, patchClip, snapshotGroove, stepsOf, type DrumPart, type Groove, type RecMode, type UserSequence } from "./groove";
 import { applyBeat, applyGroovePreset, applyPhrase } from "./groove-factory";
+import { applyLearnCc, loadMidiMap, saveMidiMap } from "./midi-learn";
+import { captureScene, emptyScenes, loadScenes, saveScenes, type SceneSlot } from "./scenes";
 
 const USER_KEY = "lyra32-user-patches";
 const SEQ_KEY = "lyra32-user-sequences";
@@ -111,6 +113,12 @@ type State = {
   clockFollow: boolean;
   dawOpen: boolean;
   helpOpen: boolean;
+  stageLock: boolean;
+  midiLearn: boolean;
+  midiLearnId: string | null;
+  midiMap: Record<number, string>;
+  scenes: SceneSlot[];
+  activeScene: number | null;
   voices: number;
   cutoffMod: number;
   octave: number;
@@ -148,6 +156,12 @@ type State = {
   setClockFollow: (on: boolean) => void;
   setDawOpen: (on: boolean) => void;
   setHelpOpen: (on: boolean) => void;
+  setStageLock: (on: boolean) => void;
+  setMidiLearn: (on: boolean) => void;
+  armLearn: (id: string) => void;
+  saveScene: (i: number) => void;
+  recallScene: (i: number) => void;
+  clearScene: (i: number) => void;
   selectLayer: (id: LayerId) => void;
   setLayerOn: (id: LayerId, on: boolean) => void;
   setLayerLevel: (id: LayerId, level: number) => void;
@@ -167,6 +181,10 @@ type State = {
   clearDrumLane: (part: DrumPart) => void;
   hydrate: () => void;
 };
+
+function emptyScenesSafe(): SceneSlot[] {
+  return typeof window === "undefined" ? emptyScenes() : loadScenes();
+}
 
 function shareFx(from: Patch, onto: Patch): Patch {
   return clonePatch(onto, { fx: from.fx, arp: from.arp, master: from.master, groove: from.groove });
@@ -247,6 +265,22 @@ function hookMidi(engine: LyraEngine) {
       noteOn: (n, v) => useSynth.getState().noteOn(n, v),
       noteOff: (n) => useSynth.getState().noteOff(n),
       cc: (ctl, value) => {
+        if (ctl === 64) {
+          engine.setSustain(value >= 0.5);
+          return;
+        }
+        const st = useSynth.getState();
+        if (st.midiLearn && st.midiLearnId) {
+          const midiMap = { ...st.midiMap, [ctl]: st.midiLearnId };
+          saveMidiMap(midiMap);
+          useSynth.setState({ midiMap, midiLearnId: null });
+          return;
+        }
+        const learned = st.midiMap[ctl];
+        if (learned) {
+          st.setPatch(applyLearnCc(st.patch, learned, value));
+          return;
+        }
         if (ctl === 1 || ctl === 74) {
           engine.setCutoffMod(value);
           useSynth.setState({ cutoffMod: value });
@@ -255,7 +289,6 @@ function hookMidi(engine: LyraEngine) {
           const p = clonePatch(useSynth.getState().patch, { master: value });
           useSynth.getState().setPatch(p);
         }
-        if (ctl === 64) engine.setSustain(value >= 0.5);
       },
       pitchBend: (semis) => engine.setBend(semis),
       aftertouch: (v) => engine.setAftertouch(v),
@@ -337,6 +370,12 @@ export const useSynth = create<State>((set, get) => ({
   clockFollow: false,
   dawOpen: false,
   helpOpen: false,
+  stageLock: false,
+  midiLearn: false,
+  midiLearnId: null,
+  midiMap: typeof window === "undefined" ? {} : loadMidiMap(),
+  scenes: emptyScenesSafe(),
+  activeScene: null,
   voices: 0,
   cutoffMod: 0,
   octave: 0,
@@ -568,6 +607,52 @@ export const useSynth = create<State>((set, get) => ({
 
   setDawOpen: (on) => set({ dawOpen: on, helpOpen: on ? false : get().helpOpen }),
   setHelpOpen: (on) => set({ helpOpen: on, dawOpen: on ? false : get().dawOpen }),
+  setStageLock: (on) => {
+    set({ stageLock: on });
+    if (on) get().arm();
+  },
+
+  setMidiLearn: (on) => set({ midiLearn: on, midiLearnId: on ? get().midiLearnId : null }),
+  armLearn: (id) => set({ midiLearn: true, midiLearnId: id }),
+
+  saveScene: (i) => {
+    const s = get();
+    const slots = s.scenes.slice();
+    slots[i] = captureScene({
+      layerA: s.layerA,
+      layerB: s.layerB,
+      mixA: s.mixA,
+      mixB: s.mixB,
+      stackMode: s.stackMode,
+      splitNote: s.splitNote,
+      groove: grooveOf(s.patch.groove),
+    });
+    saveScenes(slots);
+    set({ scenes: slots, activeScene: i });
+  },
+  recallScene: (i) => {
+    const sc = get().scenes[i];
+    if (!sc) return;
+    set({
+      layer: "a",
+      patch: sc.layerA,
+      layerA: sc.layerA,
+      layerB: sc.layerB,
+      mixA: sc.mixA,
+      mixB: sc.mixB,
+      stackMode: sc.stackMode,
+      splitNote: sc.splitNote,
+      activeScene: i,
+    });
+    putGroove(get, set, sc.groove, false);
+    pushEngine(get);
+  },
+  clearScene: (i) => {
+    const slots = get().scenes.slice();
+    slots[i] = null;
+    saveScenes(slots);
+    set({ scenes: slots, activeScene: get().activeScene === i ? null : get().activeScene });
+  },
 
   selectLayer: (id) => {
     const s = get();
@@ -756,6 +841,14 @@ export function bindComputerKeyboard() {
     }
     if (k === "x") {
       useSynth.getState().shiftOctave(1);
+      return;
+    }
+    const digit = e.code.match(/^Digit([1-8])$/);
+    if (digit && !e.metaKey && !e.ctrlKey) {
+      const i = Number(digit[1]) - 1;
+      const st = useSynth.getState();
+      if (e.shiftKey || !st.scenes[i]) st.saveScene(i);
+      else st.recallScene(i);
       return;
     }
     if (k === "?" ) {
