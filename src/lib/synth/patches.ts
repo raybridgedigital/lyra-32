@@ -3,6 +3,8 @@ import { clonePatch, mx, patch, foldMaster } from "./patch-kit";
 import { EXTRA_FACTORY } from "./factory-extra";
 import { EXTRA_V43 } from "./factory-v43";
 import { EXTRA_ERA } from "./factory-era";
+import { EXTRA_V57 } from "./factory-v57";
+import { buildStackedFactory } from "./factory-stacked";
 import { CATEGORY_ORDER } from "./patch-kit";
 
 export { clonePatch, foldMaster, CATEGORY_ORDER, isStackedPatch, stackedLabel, stackSaveName } from "./patch-kit";
@@ -439,7 +441,8 @@ const CORE: Patch[] = [
   }),
 ];
 
-export const FACTORY: Patch[] = [...CORE, ...EXTRA_FACTORY, ...EXTRA_V43, ...EXTRA_ERA];
+const SINGLES: Patch[] = [...CORE, ...EXTRA_FACTORY, ...EXTRA_V43, ...EXTRA_ERA, ...EXTRA_V57];
+export const FACTORY: Patch[] = [...SINGLES, ...buildStackedFactory(SINGLES)];
 
 export const INIT_PATCH = clonePatch(FACTORY[0]!);
 

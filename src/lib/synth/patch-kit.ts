@@ -702,5 +702,7 @@ export function P(category: string, id: string, name: string, over: Over = {}): 
       ...over.arp,
       steps: over.arp?.steps ? normalizeArpSteps(over.arp.steps) : d.arp.steps,
     },
+    ...(over.drawShape ? { drawShape: { ...defaultDrawShape(), ...over.drawShape } } : {}),
+    ...(over.drawShape2 ? { drawShape2: { ...defaultDrawShape2(), ...over.drawShape2 } } : {}),
   });
 }

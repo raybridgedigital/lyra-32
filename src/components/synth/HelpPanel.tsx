@@ -490,9 +490,9 @@ function StudioTab() {
       <H>Library</H>
       <Ul
         items={[
-          <>271 factory patches: core roles plus 100 era sounds (20 each for 2022–2026 — phonk, Jersey, Brat, Amapiano, botanica, jerk, and the rest of the last five years). Star a patch for Favorite.</>,
+          <>401 factory patches: 50 V.7 singles plus 80 Stacked pairs, on top of the older bank. Star a patch for Favorite.</>,
           <>Star a patch to drop it in Favorite. The header star is the same list.</>,
-          <>Name this patch + Save writes a User copy. If B is on, it lands in Stacked as “A + B”.</>,
+          <>Stacked tab: factory pairs (A + B). Load from layer A to recall both, from B for the right-hand sound only.</>,
           <>Pencil to rename a user patch, trash to delete. Factory names cannot be renamed.</>,
         ]}
       />
