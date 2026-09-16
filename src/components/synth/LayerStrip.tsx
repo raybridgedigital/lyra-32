@@ -3,7 +3,7 @@ import { Power } from "lucide-react";
 import { cn } from "@/lib/cn";
 import type { LayerId, Patch } from "@/lib/synth/types";
 import { midiName, waveLine } from "@/lib/synth/stack";
-import { groupByCategory } from "@/lib/synth/patches";
+import { groupByCategory, stackedLabel } from "@/lib/synth/patches";
 import { useSynth } from "@/lib/synth/store";
 
 function PatchMenu({
@@ -69,7 +69,7 @@ function PatchMenu({
           setOpen((v) => !v);
         }}
       >
-        {empty ? "— off —" : current?.name ?? "Patch"}
+        {empty ? "— off —" : current ? stackedLabel(current) : "Patch"}
       </button>
       {open ? (
         <div
@@ -107,7 +107,7 @@ function PatchMenu({
                     setOpen(false);
                   }}
                 >
-                  {x.name}
+                  {stackedLabel(x)}
                 </button>
               ))}
             </div>

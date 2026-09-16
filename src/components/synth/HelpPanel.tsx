@@ -481,16 +481,18 @@ function StudioTab() {
       <H>Two layers</H>
       <P>
         Cards A and B under the header. Gold outline is the layer the faceplate edits. Power mutes a layer. Load a second
-        factory or user patch into B, then Stack (both on every key) or Split (A below the split note, B above). Level and pan
-        are per layer. Arp, pattern, and FX stay shared. 32 voices are shared — both layers on is about 16-note poly. Save
-        writes the whole stack into User.
+        factory or user patch into B, then Stack (both on every key) or Split (A below the split note, B above). Each layer
+        has its own FX, arp, Shape, LFOs, poly/glide. Groove and header tempo are shared. Vol is the room. Level and pan are
+        per layer. 32 voices are shared — both layers on is about 16-note poly. Save with B on writes a Stacked patch named
+        like Warm Field + Sub Current. Load from A recalls both layers. Load from B puts only the right-hand sound on B and
+        leaves A. The + in the name is the warning.
       </P>
       <H>Library</H>
       <Ul
         items={[
           <>271 factory patches: core roles plus 100 era sounds (20 each for 2022–2026 — phonk, Jersey, Brat, Amapiano, botanica, jerk, and the rest of the last five years). Star a patch for Favorite.</>,
           <>Star a patch to drop it in Favorite. The header star is the same list.</>,
-          <>Name this patch + Save writes a User copy in this browser (localStorage).</>,
+          <>Name this patch + Save writes a User copy. If B is on, it lands in Stacked as “A + B”.</>,
           <>Pencil to rename a user patch, trash to delete. Factory names cannot be renamed.</>,
         ]}
       />
@@ -550,7 +552,7 @@ function AboutTab() {
     <>
       <H>LYRA-32</H>
       <P>
-        by Ray Bridge Digital · Mk V.6 · Version 5.6. 32-voice hybrid synthesizer for Chrome, Edge, and Firefox. Dual
+        by Ray Bridge Digital · Mk V.7 · Version 5.7. 32-voice hybrid synthesizer for Chrome, Edge, and Firefox. Dual
         oscillator + sub + noise, dual LFO, 6-slot matrix, FX rack, arpeggiator with 16-step pattern, two-layer stack /
         split, a groovebox, drawn Shape (×2), scenes, MIDI learn, and bounce-to-wav. USB-C MIDI, computer keys, or the
         on-screen piano. Not a VST/AU — DAW mode uses IAC MIDI. Open Help → Live for the stage cheat sheet.

@@ -5,7 +5,7 @@ import { EXTRA_V43 } from "./factory-v43";
 import { EXTRA_ERA } from "./factory-era";
 import { CATEGORY_ORDER } from "./patch-kit";
 
-export { clonePatch, foldMaster, CATEGORY_ORDER };
+export { clonePatch, foldMaster, CATEGORY_ORDER, isStackedPatch, stackedLabel, stackSaveName } from "./patch-kit";
 
 const baseFx = {
   delayMix: 0.12,

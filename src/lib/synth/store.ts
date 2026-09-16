@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type { LayerId, LayerMix, MidiStatus, Patch, StackMode } from "./types";
-import { FACTORY, INIT_PATCH, clonePatch, foldMaster } from "./patches";
+import { FACTORY, INIT_PATCH, clonePatch, foldMaster, stackSaveName } from "./patches";
 import { LyraEngine, createEngine } from "./engine";
 import { QWERTY_MAP, connectMidi, setMidiPortFilter, type MidiPortInfo } from "./midi";
 import { defaultMix } from "./stack";
@@ -253,16 +253,20 @@ function applyLive(
   pushEngine(get);
 }
 
-function shareFx(from: Patch, onto: Patch): Patch {
-  return clonePatch(onto, { fx: from.fx, arp: from.arp, master: from.master, groove: from.groove });
+function shareGroove(from: Patch, onto: Patch): Patch {
+  const tempo = from.arp.tempo;
+  return clonePatch(onto, {
+    groove: from.groove,
+    arp: onto.arp.tempo === tempo ? onto.arp : { ...onto.arp, tempo },
+  });
 }
 
 function putGroove(get: () => State, set: (p: Partial<State>) => void, groove: Groove, snap = false) {
   if (snap) pushUndo(get, set);
   const s = get();
   const patch = clonePatch(s.patch, { groove });
-  if (s.layer === "b") set({ patch, layerB: patch, layerA: shareFx(patch, s.layerA) });
-  else set({ patch, layerA: patch, layerB: shareFx(patch, s.layerB) });
+  if (s.layer === "b") set({ patch, layerB: patch, layerA: shareGroove(patch, s.layerA) });
+  else set({ patch, layerA: patch, layerB: shareGroove(patch, s.layerB) });
   pushEngine(get);
 }
 
@@ -274,7 +278,7 @@ function pushEngine(get: () => State) {
     a: { id: "a", on: s.mixA.on, level: s.mixA.level, pan: s.mixA.pan, patch: s.layerA },
     b: { id: "b", on: s.mixB.on, level: s.mixB.level, pan: s.mixB.pan, patch: s.layerB },
   });
-  s.engine?.applyPatch(s.patch);
+  s.engine?.applyPatch(s.patch, s.layer);
   s.engine?.setBank?.([...s.factory, ...s.userPatches]);
 }
 let midiUnsub: (() => void) | null = null;
@@ -427,7 +431,7 @@ function bootEngine(): LyraEngine {
     onGrooveStep: (step) => useSynth.setState({ grooveStep: step }),
     onState: (ctxState) => useSynth.setState({ ctxState, armed: ctxState === "running" || useSynth.getState().armed }),
   });
-  engine.applyPatch(useSynth.getState().patch);
+  engine.applyPatch(useSynth.getState().patch, useSynth.getState().layer);
   engine.setOutputVol(useSynth.getState().outputVol);
   useSynth.setState({ engine, armed: true, ctxState: engine.ctx.state, audioSinkOk: engine.canSetSink() });
   const sink = useSynth.getState().audioOutputId;
@@ -512,9 +516,20 @@ export const useSynth = create<State>((set, get) => ({
   loadPatch: (p) => {
     const src = foldMaster(p);
     const stacked = src.stack?.b?.patch;
+    const s = get();
+    if (stacked && s.layer === "b") {
+      const layerB = shareGroove(s.layerA, clonePatch({ ...stacked, stack: undefined }));
+      set({
+        patch: layerB,
+        layerB,
+        mixB: { on: true, level: src.stack!.b.level, pan: src.stack!.b.pan },
+      });
+      pushEngine(get);
+      return;
+    }
     if (stacked) {
       const a = clonePatch({ ...src, stack: undefined });
-      const b = shareFx(a, clonePatch({ ...stacked, stack: undefined }));
+      const b = shareGroove(a, clonePatch({ ...stacked, stack: undefined }));
       set({
         layer: "a",
         patch: a,
@@ -529,11 +544,11 @@ export const useSynth = create<State>((set, get) => ({
       const next = clonePatch({ ...src, stack: undefined });
       const s = get();
       if (s.layer === "b") {
-        const layerB = shareFx(s.layerA, next);
+        const layerB = shareGroove(s.layerA, next);
         set({ patch: layerB, layerB, mixB: { ...s.mixB, on: true } });
       } else {
         const layerA = next;
-        set({ patch: layerA, layerA, layerB: shareFx(layerA, s.layerB) });
+        set({ patch: layerA, layerA, layerB: shareGroove(layerA, s.layerB) });
       }
     }
     pushEngine(get);
@@ -543,11 +558,11 @@ export const useSynth = create<State>((set, get) => ({
     const s = get();
     if (s.layer === "b") {
       const layerB = p;
-      const layerA = shareFx(p, s.layerA);
+      const layerA = shareGroove(p, s.layerA);
       set({ patch: layerB, layerB, layerA });
     } else {
       const layerA = p;
-      const layerB = shareFx(p, s.layerB);
+      const layerB = shareGroove(p, s.layerB);
       set({ patch: layerA, layerA, layerB });
     }
     pushEngine(get);
@@ -556,17 +571,20 @@ export const useSynth = create<State>((set, get) => ({
   saveUserPatch: (name) => {
     const s = get();
     const id = `user-${Date.now()}`;
-    const label = name.trim() || "User patch";
-    let p = foldMaster(clonePatch(s.layerA, { id, name: label, category: "User", stack: undefined }));
-    if (s.mixB.on) {
-      p = clonePatch(p, {
-        stack: {
-          mode: s.stackMode,
-          splitNote: s.splitNote,
-          a: s.mixA,
-          b: { ...s.mixB, patch: foldMaster(clonePatch({ ...s.layerB, stack: undefined })) },
-        },
-      });
+    const stacked = s.mixB.on;
+    const label = stacked ? stackSaveName(s.layerA.name, s.layerB.name, name) : name.trim() || "User patch";
+    let p = foldMaster(clonePatch(s.layerA, { id, name: label, category: stacked ? "Stacked" : "User", stack: undefined }));
+    if (stacked) {
+      p = foldMaster(
+        clonePatch(p, {
+          stack: {
+            mode: s.stackMode,
+            splitNote: s.splitNote,
+            a: s.mixA,
+            b: { ...s.mixB, patch: foldMaster(clonePatch({ ...s.layerB, stack: undefined })) },
+          },
+        }),
+      );
     }
     const userPatches = [...s.userPatches, p];
     saveUser(userPatches);
@@ -943,7 +961,7 @@ export const useSynth = create<State>((set, get) => ({
     const s = get();
     const patch = id === "b" ? s.layerB : s.layerA;
     set({ layer: id, patch });
-    s.engine?.applyPatch(patch);
+    s.engine?.applyPatch(patch, id);
   },
 
   setLayerOn: (id, on) => {

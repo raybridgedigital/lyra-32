@@ -156,6 +156,7 @@ export function normalizePatch(p: Patch): Patch {
       amount: Number.isFinite(r.amount) ? r.amount : 0,
     };
   });
+  const stack = normalizeStackField(p.stack);
   return {
     ...p,
     ring: p.ring ?? 0,
@@ -205,8 +206,27 @@ export function normalizePatch(p: Patch): Patch {
     groove: normalizeGroove(p.groove),
     drawShape: normalizeDrawShape(p.drawShape),
     drawShape2: normalizeDrawShape(p.drawShape2 ?? defaultDrawShape2()),
-    stack: normalizeStackField(p.stack),
+    stack,
+    category: stack ? "Stacked" : p.category,
   };
+}
+
+export function isStackedPatch(p: Patch): boolean {
+  return Boolean(p.stack?.b?.patch);
+}
+
+export function stackedLabel(p: Patch): string {
+  const b = p.stack?.b?.patch;
+  if (!b) return p.name;
+  if (p.name.includes("+")) return p.name;
+  return `${p.name} + ${b.name}`;
+}
+
+export function stackSaveName(aName: string, bName: string, typed: string): string {
+  const t = typed.trim();
+  if (t.includes("+")) return t;
+  if (t) return `${t} + ${bName}`;
+  return `${aName} + ${bName}`;
 }
 
 function normalizeStackField(raw: Patch["stack"] | undefined): Patch["stack"] {
@@ -290,6 +310,7 @@ export const CATEGORY_ORDER = [
   "Techno",
   "Drums",
   "FX",
+  "Stacked",
   "2022",
   "2023",
   "2024",

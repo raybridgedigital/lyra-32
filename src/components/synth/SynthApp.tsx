@@ -15,7 +15,7 @@ import {
   VolumeX,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { clonePatch, groupByCategory } from "@/lib/synth/patches";
+import { clonePatch, groupByCategory, isStackedPatch, stackedLabel } from "@/lib/synth/patches";
 import { bindAudioUnlock, bindComputerKeyboard, useSynth } from "@/lib/synth/store";
 import { tapTempo } from "@/lib/synth/tap-tempo";
 import { startStageKeepAlive } from "@/lib/synth/stage-lock";
@@ -205,15 +205,20 @@ export function SynthApp() {
   );
   const filteredFactory = useMemo(() => {
     const q = libQ.trim().toLowerCase();
-    const pool = libCat === "Favorite" ? favoritePatches : factory;
+    const pool =
+      libCat === "Favorite"
+        ? favoritePatches
+        : libCat === "Stacked"
+          ? allPatches.filter(isStackedPatch)
+          : factory;
     return pool
       .filter((x) => {
-        if (libCat !== "All" && libCat !== "Favorite" && x.category !== libCat) return false;
+        if (libCat !== "All" && libCat !== "Favorite" && libCat !== "Stacked" && x.category !== libCat) return false;
         if (!q) return true;
-        return x.name.toLowerCase().includes(q) || x.category.toLowerCase().includes(q);
+        return stackedLabel(x).toLowerCase().includes(q) || x.category.toLowerCase().includes(q);
       })
-      .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base", numeric: true }));
-  }, [factory, favoritePatches, libCat, libQ]);
+      .sort((a, b) => stackedLabel(a).localeCompare(stackedLabel(b), undefined, { sensitivity: "base", numeric: true }));
+  }, [allPatches, factory, favoritePatches, libCat, libQ]);
 
   const update = (next: Patch) => setPatch(next);
   const p = patch;
@@ -965,6 +970,17 @@ export function SynthApp() {
               Favorite
               <span className="ml-1 tabular-nums opacity-70">{favoritePatches.length}</span>
             </button>
+            <button
+              type="button"
+              onClick={() => setLibCat("Stacked")}
+              className={cn(
+                "h-12 rounded-md px-3.5 text-lg font-medium",
+                libCat === "Stacked" ? "bg-accent text-accent-fg" : "bg-elevated text-muted hover:text-fg",
+              )}
+            >
+              Stacked
+              <span className="ml-1 tabular-nums opacity-70">{allPatches.filter(isStackedPatch).length}</span>
+            </button>
             {factoryGroups.map((g) => (
               <button
                 key={g.category}
@@ -1004,9 +1020,9 @@ export function SynthApp() {
                       "min-w-0 flex-1 truncate px-3 py-2.5 text-left text-lg",
                       x.id !== p.id && "hover:text-accent",
                     )}
-                    title={`${x.category} — ${x.name}`}
+                    title={`${x.category} — ${stackedLabel(x)}`}
                   >
-                    {x.name}
+                    {stackedLabel(x)}
                   </button>
                   <button
                     type="button"
@@ -1112,7 +1128,7 @@ export function SynthApp() {
                     />
                   ) : (
                     <button type="button" className="min-w-0 flex-1 truncate text-left text-lg hover:text-accent" onClick={() => loadPatch(u)}>
-                      {u.name}
+                      {stackedLabel(u)}
                     </button>
                   )}
                   <button

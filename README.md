@@ -1,4 +1,4 @@
-# LYRA-32 Mk V.6
+# LYRA-32 Mk V.7
 
 Hybrid polyphonic web synthesizer by [Raybridge Digital](https://github.com/raybridgedigital).
 
@@ -6,7 +6,13 @@ Play from a class-compliant USB-C MIDI keyboard, the computer keys (A–L), or t
 
 **Play it:** [raybridgedigital.github.io/lyra-32](https://raybridgedigital.github.io/lyra-32/) (GitHub Pages — open in a full Chrome tab).
 
-This tag is the restore point **with** header Vol, Out folded into patches, MIDI/DAW in Help.
+This tag is the restore point **with** true dual layer (FX, arp, Shape, LFO, poly/glide per layer) and Stacked library load.
+
+## Mk V.7 (v5.7)
+
+- Per layer: FX, arp, Shape, LFO clocks, poly/glide (plus tone). Groove, tempo, Vol shared.
+- Stacked saves: name `A + B`. Load from A = both. Load from B = B half only.
+- Restore: `git checkout v5.7.0`
 
 ## Mk V.6 (v5.6)
 
