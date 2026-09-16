@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { CircleHelp, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useSynth } from "@/lib/synth/store";
@@ -141,6 +141,50 @@ function Ul({ items }: { items: ReactNode[] }) {
   );
 }
 
+function BackupRestoreRow() {
+  const exportBackup = useSynth((s) => s.exportBackup);
+  const importBackup = useSynth((s) => s.importBackup);
+  const ref = useRef<HTMLInputElement>(null);
+  return (
+    <div className="mb-3 flex flex-wrap gap-2">
+      <button
+        type="button"
+        className="h-10 rounded-md bg-elevated px-4 text-sm font-semibold text-muted hover:text-fg"
+        onClick={() => exportBackup()}
+      >
+        Backup
+      </button>
+      <button
+        type="button"
+        className="h-10 rounded-md bg-elevated px-4 text-sm font-semibold text-muted hover:text-fg"
+        onClick={() => ref.current?.click()}
+      >
+        Restore
+      </button>
+      <input
+        ref={ref}
+        type="file"
+        accept="application/json,.json"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          e.target.value = "";
+          if (!file) return;
+          if (!window.confirm("Replace scenes, MIDI maps, and user patches in this browser with this backup?")) return;
+          void file.text().then((t) => {
+            try {
+              const ok = importBackup(JSON.parse(t));
+              if (!ok) window.alert("That file is not a LYRA backup.");
+            } catch {
+              window.alert("That file is not a LYRA backup.");
+            }
+          });
+        }}
+      />
+    </div>
+  );
+}
+
 function StartTab() {
   return (
     <>
@@ -271,9 +315,10 @@ function LiveTab() {
           <>Panic / Esc kills stuck notes, arp latch, aftertouch, mod. It is not Mute.</>,
           <>Transpose click the number to 0. Octave is Z / X and the header C3 display.</>,
           <>Hold on the arp latches the chord. All keys up, then a new chord, replaces it.</>,
-          <>User patches, favorites, MIDI maps, and scenes live in this browser only. Library → Backup downloads them as a file. Restore that file if Chrome data is wiped.</>,
+          <>User patches, favorites, MIDI maps, and scenes live in this browser only. Backup / Restore below (or in Library) downloads them as a file.</>,
         ]}
       />
+      <BackupRestoreRow />
     </>
   );
 }
@@ -465,9 +510,11 @@ function FaqTab() {
     <>
       <H>Backup</H>
       <P>
-        Library → Backup downloads scenes, MIDI maps, user patches, favorites, and sequences as a JSON file. Keep a copy
-        on the Mac. Restore replaces what is in this browser with that file. Store / A/B is not in the backup.
+        Downloads scenes, MIDI maps, user patches, favorites, and sequences as a JSON file. Keep a copy on the Mac.
+        Restore replaces what is in this browser with that file. Store / A/B is not in the backup. Same buttons live in
+        Library.
       </P>
+      <BackupRestoreRow />
       <H>No sound</H>
       <Ul
         items={[
@@ -501,6 +548,8 @@ function AboutTab() {
         split, a groovebox, drawn Shape (×2), scenes, MIDI learn, and bounce-to-wav. USB-C MIDI, computer keys, or the
         on-screen piano. Not a VST/AU — DAW mode uses IAC MIDI. Open Help → Live for the stage cheat sheet.
       </P>
+      <H>Backup</H>
+      <BackupRestoreRow />
       <div className="lyra-about-brand">
         <LayerBrand />
       </div>
