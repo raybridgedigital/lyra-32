@@ -368,6 +368,14 @@ function isTouchIos() {
 
 function unlockHtml() {
   try {
+    if (!isTouchIos()) {
+      const a = new Audio(
+        "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA",
+      );
+      a.volume = 0.01;
+      void a.play();
+      return;
+    }
     if (!htmlKeep) {
       const a = new Audio(
         "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA",
