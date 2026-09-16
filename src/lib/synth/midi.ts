@@ -200,6 +200,8 @@ function attachInputs(access: MidiAccessLike, handlers: MidiHandlers) {
 
 export function parseMidi(data: Uint8Array, h: MidiHandlers) {
   if (data.length < 1) return;
+  // MIDIWeb on iPad sometimes delivers USB-MIDI packets: CIN/cable + 3 MIDI bytes.
+  if (data.length === 4 && data[0]! < 0x80) data = data.subarray(1);
   const status = data[0]!;
   if (status >= 0xf8) {
     const tick = clock.push(status);
@@ -216,18 +218,29 @@ export function parseMidi(data: Uint8Array, h: MidiHandlers) {
   const a = data[1] ?? 0;
   const b = data[2] ?? 0;
   if (cmd === 0x90) {
+    if (data.length < 3) return;
     if (b === 0) h.noteOff(a);
     else h.noteOn(a, b / 127);
   } else if (cmd === 0x80) {
+    if (data.length < 2) return;
     h.noteOff(a);
   } else if (cmd === 0xb0) {
+    if (data.length < 3) return;
     h.cc(a, b / 127);
   } else if (cmd === 0xe0) {
+    // Incomplete bend (missing MSB) would read as 0 → full pitch-down. Ignore.
+    if (data.length < 3) return;
     const v14 = (b << 7) | a;
+    if (Math.abs(v14 - 8192) < 96) {
+      h.pitchBend(0);
+      return;
+    }
     h.pitchBend(((v14 - 8192) / 8192) * 2);
   } else if (cmd === 0xd0) {
+    if (data.length < 2) return;
     h.aftertouch?.(a / 127);
   } else if (cmd === 0xa0) {
+    if (data.length < 3) return;
     h.aftertouch?.(b / 127);
   }
 }

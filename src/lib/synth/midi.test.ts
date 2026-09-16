@@ -47,3 +47,30 @@ describe("parseMidi clock", () => {
     assert.equal(ticks.at(-1)?.running, false);
   });
 });
+
+describe("parseMidi pitch bend", () => {
+  it("ignores incomplete pitch-bend (would have been full down)", () => {
+    const bends: number[] = [];
+    const { h } = capture();
+    h.pitchBend = (s) => bends.push(s);
+    parseMidi(Uint8Array.of(0xe0, 0), h);
+    assert.equal(bends.length, 0);
+  });
+
+  it("centers values near 8192", () => {
+    const bends: number[] = [];
+    const { h } = capture();
+    h.pitchBend = (s) => bends.push(s);
+    parseMidi(Uint8Array.of(0xe0, 0, 0x40), h);
+    assert.equal(bends.length, 1);
+    assert.equal(bends[0], 0);
+  });
+
+  it("unwraps USB-MIDI CIN packets", () => {
+    const notes: number[] = [];
+    const { h } = capture();
+    h.noteOn = (n) => notes.push(n);
+    parseMidi(Uint8Array.of(0x09, 0x90, 60, 100), h);
+    assert.deepEqual(notes, [60]);
+  });
+});
