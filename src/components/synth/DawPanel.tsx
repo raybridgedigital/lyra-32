@@ -15,7 +15,6 @@ export function DawPanel() {
   const setAudioOutput = useSynth((s) => s.setAudioOutput);
   const pickAudioOutput = useSynth((s) => s.pickAudioOutput);
   const audioSinkMsg = useSynth((s) => s.audioSinkMsg);
-  const audioPickOk = useSynth((s) => s.audioPickOk);
   const clockBpm = useSynth((s) => s.clockBpm);
   const clockRunning = useSynth((s) => s.clockRunning);
   const clockFollow = useSynth((s) => s.clockFollow);
@@ -79,36 +78,31 @@ export function DawPanel() {
 
             <h3 className="lyra-cell-title mt-6">Audio output</h3>
             <p className="mb-2 text-sm text-muted">
-              {audioPickOk
-                ? "Choose output lists MacBook Speakers and CK Series. Until Chrome allows that, the menu is System default — the same as  → System Settings → Sound."
-                : "This tab cannot list speakers. Change MacBook Speakers vs CK Series in  → System Settings → Sound. LYRA already follows that. (Chrome only exposes the in-app list on a full https tab with speaker permission — not in this preview.)"}
+              Choose output asks Chrome for MacBook Speakers vs CK Series. If Chrome never lists them, use  → System
+              Settings → Sound — LYRA already follows that.
             </p>
-            {audioPickOk ? (
-              <>
-                <select
-                  aria-label="Audio output"
-                  className="h-11 w-full rounded-lg bg-elevated px-3 text-base text-fg"
-                  value={audioOutputId}
-                  onChange={(e) => void setAudioOutput(e.target.value)}
-                >
-                  <option value="">System default</option>
-                  {audioOutputs
-                    .filter((d) => d.id)
-                    .map((d) => (
-                      <option key={d.id} value={d.id}>
-                        {d.label || "Output"}
-                      </option>
-                    ))}
-                </select>
-                <button
-                  type="button"
-                  className="mt-2 h-10 rounded-md bg-accent px-3 text-sm font-semibold text-accent-fg"
-                  onClick={() => void pickAudioOutput()}
-                >
-                  Choose output…
-                </button>
-              </>
-            ) : null}
+            <select
+              aria-label="Audio output"
+              className="h-11 w-full rounded-lg bg-elevated px-3 text-base text-fg"
+              value={audioOutputId}
+              onChange={(e) => void setAudioOutput(e.target.value)}
+            >
+              <option value="">System default</option>
+              {audioOutputs
+                .filter((d) => d.id)
+                .map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.label || "Output"}
+                  </option>
+                ))}
+            </select>
+            <button
+              type="button"
+              className="mt-2 h-10 rounded-md bg-accent px-3 text-sm font-semibold text-accent-fg"
+              onClick={() => void pickAudioOutput()}
+            >
+              Choose output…
+            </button>
             {audioSinkMsg ? <p className="mt-2 text-sm text-muted">{audioSinkMsg}</p> : null}
 
             <div className="mt-4 flex items-center gap-3">

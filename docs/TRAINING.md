@@ -1,4 +1,4 @@
-# LYRA-32 Mk V.2 — training manual
+# LYRA-32 Mk V.3 — training manual
 
 Hybrid 32-voice web synthesizer by Ray Bridge Digital. Play it in Chrome, Edge, or Firefox. This is the full course — the in-app Help (**?**) is the same material in short form.
 

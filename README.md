@@ -1,4 +1,4 @@
-# LYRA-32 Mk V.2
+# LYRA-32 Mk V.3
 
 Hybrid polyphonic web synthesizer by [Raybridge Digital](https://github.com/raybridgedigital).
 
@@ -6,7 +6,17 @@ Play from a class-compliant USB-C MIDI keyboard, the computer keys (A–L), or t
 
 **Play it:** [raybridgedigital.github.io/lyra-32](https://raybridgedigital.github.io/lyra-32/) (GitHub Pages — open in a full Chrome tab).
 
-This tag is the restore point **with** scenes, morph, A/B, bounce-to-wav, backup/restore, and the live cheat-sheet.
+This tag is the restore point **with** GitHub Pages, DAW audio output, and Help Backup / Restore.
+
+## Mk V.3 (v5.3)
+
+- GitHub Pages: https://raybridgedigital.github.io/lyra-32/
+- DAW → Audio output / Choose output (Chrome speaker list when the tab allows it)
+- Help Backup / Restore
+- Restore: `git checkout v5.3.0`
+
+## Mk V.2 (v5.2)
+
 
 ## Mk V.2 (v5.2)
 
