@@ -110,6 +110,14 @@ const ARP_DIV: Record<string, number> = {
   "1/32": 0.125,
 };
 
+export function isIosTouch() {
+  if (typeof navigator === "undefined") return false;
+  return (
+    /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
+  );
+}
+
 /** Must run inside a user-gesture stack. Never await before this. */
 export function kickContext(ctx: AudioContext) {
   try {
@@ -130,10 +138,15 @@ function makeAudioContext(): AudioContext {
   const AC =
     window.AudioContext ||
     (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+  const ios = isIosTouch();
   try {
-    return new AC({ latencyHint: "interactive" });
+    return new AC(ios ? { latencyHint: 0.005, sampleRate: 44100 } : { latencyHint: "interactive" });
   } catch {
-    return new AC();
+    try {
+      return new AC({ latencyHint: "interactive", ...(ios ? { sampleRate: 44100 } : {}) });
+    } catch {
+      return new AC();
+    }
   }
 }
 
@@ -868,6 +881,7 @@ export class LyraEngine {
   ctx: AudioContext;
   analyser: AnalyserNode;
   private iosEl: HTMLAudioElement | null = null;
+  private iosDest: MediaStreamAudioDestinationNode | null = null;
   private patch: Patch = clonePatch(INIT_PATCH);
   private voices: Voice[] = [];
   private held = new Map<number, Voice[] | "arp">();
@@ -1117,11 +1131,7 @@ export class LyraEngine {
   }
 
   private hookIosSpeaker(analyser: AnalyserNode) {
-    if (typeof navigator === "undefined") return;
-    const ios =
-      /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-    if (!ios) return;
+    if (!isIosTouch()) return;
     try {
       analyser.disconnect(this.ctx.destination);
     } catch {
@@ -1144,6 +1154,32 @@ export class LyraEngine {
       /* next resume() */
     });
     this.iosEl = el;
+    this.iosDest = dest;
+  }
+
+  setIosLowLat(on: boolean) {
+    if (!this.iosEl || !this.iosDest) return;
+    try {
+      this.analyser.disconnect(this.iosDest);
+    } catch {
+      /* */
+    }
+    try {
+      this.analyser.disconnect(this.ctx.destination);
+    } catch {
+      /* */
+    }
+    if (on) {
+      this.analyser.connect(this.ctx.destination);
+      this.iosEl.muted = true;
+      this.iosEl.pause();
+    } else {
+      this.analyser.connect(this.iosDest);
+      this.iosEl.muted = false;
+      void this.iosEl.play().catch(() => {
+        /* */
+      });
+    }
   }
 
   private startShClock() {

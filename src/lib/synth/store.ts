@@ -18,6 +18,7 @@ const KEYS_KEY = "lyra32-show-keys";
 const PORT_KEY = "lyra32-midi-port";
 const CLOCK_KEY = "lyra32-clock-follow";
 const SINK_KEY = "lyra32-audio-sink";
+const IOS_LOW_KEY = "lyra32-ios-lowlat";
 const FAV_KEY = "lyra32-favorites";
 
 function loadUser(): Patch[] {
@@ -117,6 +118,7 @@ type State = {
   audioSinkOk: boolean;
   audioPickOk: boolean;
   audioSinkMsg: string;
+  iosLowLat: boolean;
   clockBpm: number | null;
   clockRunning: boolean;
   clockFollow: boolean;
@@ -174,6 +176,7 @@ type State = {
   refreshAudioOutputs: () => Promise<void>;
   setAudioOutput: (id: string) => Promise<void>;
   pickAudioOutput: () => Promise<void>;
+  setIosLowLat: (on: boolean) => void;
   setClockFollow: (on: boolean) => void;
   setDawOpen: (on: boolean) => void;
   setHelpOpen: (on: boolean) => void;
@@ -403,6 +406,7 @@ function bootEngine(): LyraEngine {
   useSynth.setState({ engine, armed: true, ctxState: engine.ctx.state, audioSinkOk: engine.canSetSink() });
   const sink = useSynth.getState().audioOutputId;
   if (sink && !isTouchIos()) void engine.setSink(sink).catch(() => { /* */ });
+  if (useSynth.getState().iosLowLat) engine.setIosLowLat(true);
   pushEngine(() => useSynth.getState());
   hookMidi(engine);
 
@@ -438,6 +442,7 @@ export const useSynth = create<State>((set, get) => ({
   audioSinkOk: false,
   audioPickOk: false,
   audioSinkMsg: "",
+  iosLowLat: typeof window === "undefined" ? false : localStorage.getItem(IOS_LOW_KEY) === "1",
   clockBpm: null,
   clockRunning: false,
   clockFollow: false,
@@ -716,6 +721,16 @@ export const useSynth = create<State>((set, get) => ({
       set({ audioSinkMsg: e instanceof Error ? e.message : "Could not switch speaker." });
     }
     await get().refreshAudioOutputs();
+  },
+
+  setIosLowLat: (on) => {
+    try {
+      localStorage.setItem(IOS_LOW_KEY, on ? "1" : "0");
+    } catch {
+      /* */
+    }
+    set({ iosLowLat: on });
+    get().engine?.setIosLowLat(on);
   },
 
   pickAudioOutput: async () => {
